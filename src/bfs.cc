@@ -10,6 +10,7 @@
 #include "command_line.h"
 #include "graph.h"
 #include "platform_atomics.h"
+#include "pe_opts.h"
 #include "pvector.h"
 #include "sliding_queue.h"
 #include "timer.h"
@@ -47,18 +48,27 @@ int64_t BUStep(const Graph &g, pvector<NodeID> &parent, Bitmap &front,
                Bitmap &next) {
   int64_t awake_count = 0;
   next.reset();
-  #pragma omp parallel for reduction(+ : awake_count) schedule(dynamic, 1024)
-  for (NodeID u=0; u < g.num_nodes(); u++) {
-    if (parent[u] < 0) {
-      for (NodeID v : g.in_neigh(u)) {
-        if (front.get_bit(v)) {
-          parent[u] = v;
-          awake_count++;
-          next.set_bit(u);
-          break;
+  #pragma omp parallel
+  {
+    PE_REGION_BEGIN("BUStep");
+#ifdef OMP_RUNTIME_SCHED
+    #pragma omp for reduction(+ : awake_count) schedule(runtime)
+#else
+    #pragma omp for reduction(+ : awake_count) schedule(dynamic, 1024)
+#endif
+    for (NodeID u=0; u < g.num_nodes(); u++) {
+      if (parent[u] < 0) {
+        for (NodeID v : g.in_neigh(u)) {
+          if (front.get_bit(v)) {
+            parent[u] = v;
+            awake_count++;
+            next.set_bit(u);
+            break;
+          }
         }
       }
     }
+    PE_REGION_END("BUStep");
   }
   return awake_count;
 }
@@ -69,11 +79,26 @@ int64_t TDStep(const Graph &g, pvector<NodeID> &parent,
   int64_t scout_count = 0;
   #pragma omp parallel
   {
+    PE_REGION_BEGIN("TDStep");
     QueueBuffer<NodeID> lqueue(queue);
+#ifdef OMP_RUNTIME_SCHED
+    #pragma omp for reduction(+ : scout_count) nowait schedule(runtime)
+#else
     #pragma omp for reduction(+ : scout_count) nowait
+#endif
     for (auto q_iter = queue.begin(); q_iter < queue.end(); q_iter++) {
       NodeID u = *q_iter;
+#if PF_DIST > 0
+      // Issue the random parent[] loads PF_DIST neighbours ahead to raise the
+      // number of cache misses in flight (memory-level parallelism).
+      NodeID *n_end = g.out_neigh(u).end();
+      for (NodeID *it = g.out_neigh(u).begin(); it < n_end; it++) {
+        if (n_end - it > PF_DIST)
+          __builtin_prefetch(&parent[*(it + PF_DIST)]);
+        NodeID v = *it;
+#else
       for (NodeID v : g.out_neigh(u)) {
+#endif
         NodeID curr_val = parent[v];
         if (curr_val < 0) {
           if (compare_and_swap(parent[v], curr_val, u)) {
@@ -84,16 +109,22 @@ int64_t TDStep(const Graph &g, pvector<NodeID> &parent,
       }
     }
     lqueue.flush();
+    PE_REGION_END("TDStep");
   }
   return scout_count;
 }
 
 
 void QueueToBitmap(const SlidingQueue<NodeID> &queue, Bitmap &bm) {
-  #pragma omp parallel for
-  for (auto q_iter = queue.begin(); q_iter < queue.end(); q_iter++) {
-    NodeID u = *q_iter;
-    bm.set_bit_atomic(u);
+  #pragma omp parallel
+  {
+    PE_REGION_BEGIN("QueueToBitmap");
+    #pragma omp for
+    for (auto q_iter = queue.begin(); q_iter < queue.end(); q_iter++) {
+      NodeID u = *q_iter;
+      bm.set_bit_atomic(u);
+    }
+    PE_REGION_END("QueueToBitmap");
   }
 }
 
@@ -101,26 +132,40 @@ void BitmapToQueue(const Graph &g, const Bitmap &bm,
                    SlidingQueue<NodeID> &queue) {
   #pragma omp parallel
   {
+    PE_REGION_BEGIN("BitmapToQueue");
     QueueBuffer<NodeID> lqueue(queue);
     #pragma omp for nowait
     for (NodeID n=0; n < g.num_nodes(); n++)
       if (bm.get_bit(n))
         lqueue.push_back(n);
     lqueue.flush();
+    PE_REGION_END("BitmapToQueue");
   }
   queue.slide_window();
 }
 
 pvector<NodeID> InitParent(const Graph &g) {
   pvector<NodeID> parent(g.num_nodes());
-  #pragma omp parallel for
-  for (NodeID n=0; n < g.num_nodes(); n++)
-    parent[n] = g.out_degree(n) != 0 ? -g.out_degree(n) : -1;
+  #pragma omp parallel
+  {
+    PE_REGION_BEGIN("InitParent");
+    #pragma omp for
+    for (NodeID n=0; n < g.num_nodes(); n++)
+      parent[n] = g.out_degree(n) != 0 ? -g.out_degree(n) : -1;
+    PE_REGION_END("InitParent");
+  }
   return parent;
 }
 
+#ifndef BFS_ALPHA
+#define BFS_ALPHA 15
+#endif
+#ifndef BFS_BETA
+#define BFS_BETA 18
+#endif
+
 pvector<NodeID> DOBFS(const Graph &g, NodeID source, bool logging_enabled = false,
-                      int alpha = 15, int beta = 18) {
+                      int alpha = BFS_ALPHA, int beta = BFS_BETA) {
   if (logging_enabled)
     PrintStep("Source", static_cast<int64_t>(source));
   Timer t;
@@ -253,6 +298,11 @@ int main(int argc, char* argv[]) {
     return -1;
   Builder b(cli);
   Graph g = b.MakeGraph();
+#ifdef RELABEL
+  // Degree-ordered relabelling: high-degree vertices get small, adjacent IDs,
+  // so their parent[] entries share cache lines and pages.
+  g = Builder::RelabelByDegree(g);
+#endif
   SourcePicker<Graph> sp(g, cli.start_vertex());
   auto BFSBound = [&sp,&cli] (const Graph &g) {
     return DOBFS(g, sp.PickNext(), cli.logging_en());
@@ -262,5 +312,6 @@ int main(int argc, char* argv[]) {
     return BFSVerifier(g, vsp.PickNext(), parent);
   };
   BenchmarkKernel(cli, g, BFSBound, PrintBFSStats, VerifierBound);
+  PEReportTHP();
   return 0;
 }

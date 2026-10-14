@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Builds every BFS variant of the study into pe/bin/, plus converter, microbench
+# and (if downloadable) STREAM. Also writes the GCC vectorisation reports.
+#   pe/scripts/build_variants.sh                 # Linux, g++/gcc
+#   CXX=g++-15 CC=gcc-15 pe/scripts/build_variants.sh   # macOS with Homebrew GCC
+set -u
+. "$(dirname "$0")/common.sh"
+cd "$ROOT"
+
+CXX=${CXX:-g++}
+CC=${CC:-gcc}
+BASE="-std=c++11 -Wall -g -fno-omit-frame-pointer -fopenmp"
+case "$(uname -m)" in x86_64) NATIVE="-march=native" ;; *) NATIVE="-mcpu=native" ;; esac
+FAIL=0
+
+# build NAME FLAGS...   (LIBS env var is appended after the source file)
+build() {
+  local name=$1; shift
+  printf '  %-14s %s %s\n' "$name" "$*" "${LIBS:-}"
+  if ! $CXX $BASE "$@" src/bfs.cc -o "$BIN/$name" ${LIBS:-} 2> "$BIN/$name.log"; then
+    echo "  !! BUILD FAILED: $name (see pe/bin/$name.log)"; FAIL=1
+  fi
+}
+
+echo "Compiler: $($CXX --version | head -1)"
+build bfs_base -O3
+build bfs_O0 -O0
+build bfs_O1 -O1
+build bfs_O2 -O2
+build bfs_O3 -O3
+build bfs_native -O3 $NATIVE
+build bfs_sched -O3 -DOMP_RUNTIME_SCHED
+for d in 2 4 8 16 32; do build bfs_pf$d -O3 -DPF_DIST=$d; done
+build bfs_relabel -O3 -DRELABEL
+for a in 5 15 30; do
+  for b in 9 18 36; do build bfs_a${a}b${b} -O3 -DBFS_ALPHA=$a -DBFS_BETA=$b; done
+done
+
+if [ "$OS" = Linux ]; then
+  build bfs_thp -O3 -DPE_THP_REPORT
+  build bfs_huge -O3 -DUSE_HUGEPAGES -DPE_THP_REPORT
+  build bfs_pg -O3 -pg
+  if [ -f /usr/include/papi.h ]; then
+    LIBS=-lpapi build bfs_papi -O3 -DUSE_PAPI
+  else
+    echo "  (papi.h not found: skipping bfs_papi; install libpapi-dev)"
+  fi
+fi
+
+# Vectorisation reports (GCC only), filtered to the BFS source
+for v in O3 native; do
+  flags="-O3"; [ $v = native ] && flags="-O3 $NATIVE"
+  $CXX $BASE $flags -fopt-info-vec-all src/bfs.cc -o /dev/null 2> "$OUT/vec_report_${v}_full.txt"
+  grep 'bfs.cc' "$OUT/vec_report_${v}_full.txt" > "$OUT/vec_report_${v}_bfs.txt" || true
+done
+
+# converter (same flags as base)
+$CXX $BASE -O3 src/converter.cc -o "$ROOT/converter" || FAIL=1
+
+# micro-benchmarks
+$CC -O2 -g -o "$BIN/microbench" pe/bench/microbench.c || FAIL=1
+if [ "$OS" = Linux ] && [ -f /usr/include/papi.h ]; then
+  $CC -O2 -g -DUSE_PAPI -o "$BIN/microbench_papi" pe/bench/microbench.c -lpapi || FAIL=1
+fi
+
+# STREAM (McCalpin). Downloaded at build time; arrays of 40M doubles = 320 MB
+# each, far above 4x any laptop last-level cache.
+if [ ! -f pe/bench/stream.c ]; then
+  curl -fsSL -o pe/bench/stream.c https://www.cs.virginia.edu/stream/FTP/Code/stream.c \
+    || echo "  !! could not download stream.c"
+fi
+if [ -f pe/bench/stream.c ]; then
+  $CC -O3 $NATIVE -fopenmp -DSTREAM_ARRAY_SIZE=40000000 -DNTIMES=20 \
+      pe/bench/stream.c -o "$BIN/stream" || FAIL=1
+fi
+
+[ $FAIL = 0 ] && echo "All builds OK" || { echo "Some builds failed"; exit 1; }

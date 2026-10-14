@@ -242,6 +242,7 @@ class CSRGraph {
   static DestID_** GenIndex(const pvector<SGOffset> &offsets, DestID_* neighs) {
     NodeID_ length = offsets.size();
     DestID_** index = new DestID_*[length];
+    HugeAdvise(index, length * sizeof(DestID_*));
     #pragma omp parallel for
     for (NodeID_ n=0; n < length; n++)
       index[n] = neighs + offsets[n];

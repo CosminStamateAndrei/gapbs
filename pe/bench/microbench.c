@@ -1,0 +1,131 @@
+// Micro-benchmarks with predictable answers, used to (a) validate the counter
+// tools (perf, PAPI, Instruments) and (b) measure timer resolution and memory
+// latency for the performance model. Single-threaded on purpose.
+//
+//   microbench res                 clock resolution + clock_gettime overhead
+//   microbench alu   N             N iterations of a dependent integer chain
+//   microbench chase SIZE_KB STEPS pointer chase over a random single cycle;
+//                                  prints ns per load (= latency)
+//   microbench read  SIZE_MB       sequential read of SIZE_MB, prints GB/s
+//
+// Known answers for counter validation (run each with N and 2N, subtract):
+//   alu:   instructions grow by exactly N * (instructions in the loop body)
+//   chase: with SIZE >> last-level cache, LLC misses and dTLB misses grow by
+//          ~1 per step (every load hits a new random line and page)
+// Build with -DUSE_PAPI -lpapi to wrap the measured part in a PAPI region "micro".
+
+#define _POSIX_C_SOURCE 200809L
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#ifdef USE_PAPI
+#include <papi.h>
+#define REGION_BEGIN() PAPI_hl_region_begin("micro")
+#define REGION_END()   PAPI_hl_region_end("micro")
+#else
+#define REGION_BEGIN() ((void)0)
+#define REGION_END()   ((void)0)
+#endif
+
+#define LINE 64
+
+static double now(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
+static uint64_t rng_state = 88172645463325252ULL;
+static uint64_t xorshift(void) {
+  rng_state ^= rng_state << 13;
+  rng_state ^= rng_state >> 7;
+  rng_state ^= rng_state << 17;
+  return rng_state;
+}
+
+__attribute__((noinline)) static int do_res(void) {
+  struct timespec r;
+  clock_getres(CLOCK_MONOTONIC, &r);
+  printf("res CLOCK_MONOTONIC ns %ld\n", r.tv_nsec);
+#ifdef CLOCK_PROCESS_CPUTIME_ID
+  clock_getres(CLOCK_PROCESS_CPUTIME_ID, &r);
+  printf("res CLOCK_PROCESS_CPUTIME_ID ns %ld\n", r.tv_nsec);
+#endif
+  const int calls = 1000000;
+  double t0 = now(), sink = 0;
+  for (int i = 0; i < calls; i++) sink += now();
+  double t1 = now();
+  printf("clock_gettime overhead ns %.1f (sink %g)\n", (t1 - t0) / calls * 1e9, sink > 0 ? 1.0 : 0.0);
+  return 0;
+}
+
+__attribute__((noinline)) static int do_alu(long n) {
+  uint64_t x = 1;
+  double t0 = now();
+  REGION_BEGIN();
+  for (long i = 0; i < n; i++) {
+    x = x * 6364136223846793005ULL + 1442695040888963407ULL;
+    __asm__ volatile("" : "+r"(x));  // keep the chain, stop vectorisation
+  }
+  REGION_END();
+  double t1 = now();
+  printf("alu iterations %ld time_s %.6f ns_per_iter %.3f result %llu\n",
+         n, t1 - t0, (t1 - t0) / n * 1e9, (unsigned long long)x);
+  return 0;
+}
+
+typedef struct node { struct node *next; char pad[LINE - sizeof(struct node *)]; } node;
+
+__attribute__((noinline)) static int do_chase(long size_kb, long steps) {
+  size_t n = (size_t)size_kb * 1024 / sizeof(node);
+  if (n < 2) { fprintf(stderr, "size too small\n"); return 1; }
+  node *a;
+  if (posix_memalign((void **)&a, 4096, n * sizeof(node))) { perror("alloc"); return 1; }
+  size_t *perm = malloc(n * sizeof(size_t));
+  for (size_t i = 0; i < n; i++) perm[i] = i;
+  for (size_t i = n - 1; i > 0; i--) {  // Sattolo: one cycle through all nodes
+    size_t j = xorshift() % i;
+    size_t t = perm[i]; perm[i] = perm[j]; perm[j] = t;
+  }
+  for (size_t i = 0; i < n; i++) a[i].next = &a[perm[i]];
+  free(perm);
+  node *p = &a[0];
+  for (size_t i = 0; i < n; i++) p = p->next;  // warm caches/TLB once
+  double t0 = now();
+  REGION_BEGIN();
+  for (long i = 0; i < steps; i++) p = p->next;
+  REGION_END();
+  double t1 = now();
+  printf("chase size_kb %ld steps %ld ns_per_load %.2f (end %p)\n",
+         size_kb, steps, (t1 - t0) / steps * 1e9, (void *)p);
+  free(a);
+  return 0;
+}
+
+__attribute__((noinline)) static int do_read(long size_mb) {
+  size_t n = (size_t)size_mb * 1024 * 1024 / sizeof(uint64_t);
+  uint64_t *a = malloc(n * sizeof(uint64_t));
+  for (size_t i = 0; i < n; i++) a[i] = i;
+  uint64_t s = 0;
+  double t0 = now();
+  REGION_BEGIN();
+  for (size_t i = 0; i < n; i++) s += a[i];
+  REGION_END();
+  double t1 = now();
+  printf("read size_mb %ld GBps %.2f (sum %llu)\n", size_mb,
+         n * sizeof(uint64_t) / (t1 - t0) / 1e9, (unsigned long long)s);
+  free(a);
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  if (argc >= 2 && !strcmp(argv[1], "res")) return do_res();
+  if (argc >= 3 && !strcmp(argv[1], "alu")) return do_alu(atol(argv[2]));
+  if (argc >= 4 && !strcmp(argv[1], "chase")) return do_chase(atol(argv[2]), atol(argv[3]));
+  if (argc >= 3 && !strcmp(argv[1], "read")) return do_read(atol(argv[2]));
+  fprintf(stderr, "usage: %s res | alu N | chase SIZE_KB STEPS | read SIZE_MB\n", argv[0]);
+  return 2;
+}

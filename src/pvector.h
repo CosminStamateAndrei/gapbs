@@ -6,6 +6,8 @@
 
 #include <algorithm>
 
+#include "pe_opts.h"
+
 
 /*
 GAP Benchmark Suite
@@ -28,6 +30,7 @@ class pvector {
 
   explicit pvector(size_t num_elements) {
     start_ = new T_[num_elements];
+    HugeAdvise(start_, num_elements * sizeof(T_));
     end_size_ = start_ + num_elements;
     end_capacity_ = end_size_;
   }
@@ -83,6 +86,7 @@ class pvector {
   void reserve(size_t num_elements) {
     if (num_elements > capacity()) {
       T_ *new_range = new T_[num_elements];
+      HugeAdvise(new_range, num_elements * sizeof(T_));
       #pragma omp parallel for
       for (size_t i=0; i < size(); i++)
         new_range[i] = start_[i];

@@ -285,6 +285,7 @@ class Reader {
     file.read(reinterpret_cast<char*>(&num_nodes), sizeof(SGOffset));
     pvector<SGOffset> offsets(num_nodes+1);
     neighs = new DestID_[num_edges];
+    HugeAdvise(neighs, num_edges * sizeof(DestID_));
     std::streamsize num_index_bytes = (num_nodes+1) * sizeof(SGOffset);
     std::streamsize num_neigh_bytes = num_edges * sizeof(DestID_);
     file.read(reinterpret_cast<char*>(offsets.data()), num_index_bytes);
@@ -292,6 +293,7 @@ class Reader {
     index = CSRGraph<NodeID_, DestID_>::GenIndex(offsets, neighs);
     if (directed && invert) {
       inv_neighs = new DestID_[num_edges];
+      HugeAdvise(inv_neighs, num_edges * sizeof(DestID_));
       file.read(reinterpret_cast<char*>(offsets.data()), num_index_bytes);
       file.read(reinterpret_cast<char*>(inv_neighs), num_neigh_bytes);
       inv_index = CSRGraph<NodeID_, DestID_>::GenIndex(offsets, inv_neighs);
