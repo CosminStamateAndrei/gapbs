@@ -1,0 +1,40 @@
+0000000000401310 <do_alu>:
+  401310:	push   %r12
+  401312:	push   %rbp
+  401313:	mov    %rdi,%rbp
+  401316:	sub    $0x18,%rsp
+  40131a:	callq  4012d0 <now>
+  40131f:	movsd  %xmm0,0x8(%rsp)
+  401325:	test   %rbp,%rbp
+  401328:	jle    4013a3 <do_alu+0x93>
+  40132a:	xor    %eax,%eax
+  40132c:	mov    $0x1,%r12d
+  401332:	movabs $0x5851f42d4c957f2d,%rcx
+  40133c:	movabs $0x14057b7ef767814f,%rdx
+  401346:	nopw   %cs:0x0(%rax,%rax,1)
+  401350:	imul   %rcx,%r12
+  401354:	add    %rdx,%r12
+  401357:	add    $0x1,%rax
+  40135b:	cmp    %rax,%rbp
+  40135e:	jne    401350 <do_alu+0x40>
+  401360:	callq  4012d0 <now>
+  401365:	pxor   %xmm2,%xmm2
+  401369:	mov    %r12,%rdx
+  40136c:	mov    %rbp,%rsi
+  40136f:	cvtsi2sd %rbp,%xmm2
+  401374:	subsd  0x8(%rsp),%xmm0
+  40137a:	mov    $0x402010,%edi
+  40137f:	mov    $0x2,%eax
+  401384:	movapd %xmm0,%xmm1
+  401388:	divsd  %xmm2,%xmm1
+  40138c:	mulsd  0xe04(%rip),%xmm1        # 402198 <__dso_handle+0x190>
+  401394:	callq  401050 <printf@plt>
+  401399:	add    $0x18,%rsp
+  40139d:	xor    %eax,%eax
+  40139f:	pop    %rbp
+  4013a0:	pop    %r12
+  4013a2:	retq   
+  4013a3:	mov    $0x1,%r12d
+  4013a9:	jmp    401360 <do_alu+0x50>
+  4013ab:	nopl   0x0(%rax,%rax,1)
+
