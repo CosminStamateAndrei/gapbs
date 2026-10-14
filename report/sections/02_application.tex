@@ -1,39 +1,41 @@
 % Owner: Sergiu
-\section{Application: direction-optimising BFS in \gapbs}
+\section{The application: BFS in GAPBS}
 \label{sec:app}
 
-\gapbs{} stores graphs in compressed sparse row (CSR) form: an index array of $n{+}1$ 8-byte
-pointers and a neighbour array of 4-byte vertex IDs. An undirected graph stores every edge in
-both directions. Our main input is a Kronecker graph with scale 20 (\texttt{kron20}:
-$n = 2^{20}$ vertices, $m = \num{15699691}$ undirected edges, \SI{136}{MB} in memory). It is
-generated once and loaded from a serialised file, because generating and building the graph
-took \SI{84}{\percent} of a naive benchmark run. Larger graphs (\texttt{kron22},
-\texttt{kron24}: \SIlist{0.5;2.1}{GB}) are used to vary the working set.
+\gapbs{} stores a graph in compressed sparse row (CSR) format: an index array with $n+1$
+pointers of 8 bytes, and a neighbour array with vertex IDs of 4 bytes. For an undirected
+graph every edge is stored in both directions. Our main input is a Kronecker graph of scale
+20 (\texttt{kron20}): $n = 2^{20}$ vertices, $m = \num{15699691}$ undirected edges and
+\SI{136}{MB} in memory. We generated it once and load it from a file in every run, because
+in the first naive runs generating and building the graph took \SI{84}{\percent} of the
+time. To change the size of the working set we also used \texttt{kron22} (\SI{0.5}{GB}) and
+\texttt{kron24} (\SI{2.1}{GB}).
 
-The kernel (\texttt{src/bfs.cc}) implements direction-optimising BFS~\cite{beamer2012do}. It
-returns the BFS parent of every vertex and uses five performance-relevant routines:
-\begin{description}
-  \item[\texttt{TDStep}] (top-down): every vertex in the frontier queue scans its neighbours and
-        claims unvisited ones with an atomic compare-and-swap on \texttt{parent[v]}. The access to
-        \texttt{parent[v]} is random. Parallelised over the queue (static schedule).
-  \item[\texttt{BUStep}] (bottom-up): every \emph{unvisited} vertex scans its neighbours until
-        it finds one in the frontier bitmap, then stops (early exit). It sweeps all $n$
-        vertices; neighbour lists are read from their start. Parallelised with
-        \texttt{schedule(dynamic,1024)}.
-  \item[\texttt{QueueToBitmap}, \texttt{BitmapToQueue}] convert the frontier when the
+The BFS (\texttt{src/bfs.cc}) is a direction-optimising BFS~\cite{beamer2012do}. It returns
+the parent of every vertex in the BFS tree. The important functions are:
+\begin{itemize}
+  \item \texttt{TDStep} (top-down): every vertex in the frontier queue goes over its
+        neighbours and takes the ones that are not visited yet, with an atomic
+        compare-and-swap on \texttt{parent[v]}. The access to \texttt{parent[v]} is random.
+        The loop over the queue uses a static schedule.
+  \item \texttt{BUStep} (bottom-up): every vertex that is \emph{not} visited yet goes over its
+        neighbours until it finds one that is in the frontier bitmap, and then stops.
+        This step goes over all $n$ vertices. The loop uses \texttt{schedule(dynamic,1024)}.
+  \item \texttt{QueueToBitmap} and \texttt{BitmapToQueue} convert the frontier when the
         direction changes.
-  \item[\texttt{InitParent}] initialises \texttt{parent} with negated degrees once per search.
-\end{description}
-\texttt{DOBFS} switches to bottom-up when the edges leaving the frontier exceed
-$1/\alpha$ of the unexplored edges, and back when the frontier shrinks below $n/\beta$
-(defaults $\alpha{=}15$, $\beta{=}18$).
+  \item \texttt{InitParent} fills \texttt{parent} with the negative degrees at the start of
+        every search.
+\end{itemize}
+\texttt{DOBFS} switches to bottom-up when the edges leaving the frontier are more than
+$1/\alpha$ of the edges that are not explored yet, and back to top-down when the frontier is
+smaller than $n/\beta$. The default values are $\alpha = 15$ and $\beta = 18$.
 
-\paragraph{Work actually performed.} We added an optional edge counter
-(\texttt{-DPE\_COUNT\_EDGES}). Averaged over 16 searches on \texttt{kron20}, a search performs
-4.25 top-down and 2.5 bottom-up steps and examines \num{286935} edges top-down and
-\num{1202922} edges bottom-up. That is only \SI{4.7}{\percent} of the \num{31399382}
-directed edges. Bottom-up checks \num{1659885} vertices in total, most of which find a parent
-in the frontier after reading fewer than one cache line of neighbours. Throughput is
-conventionally reported in traversed edges per second (TEPS), counting all $m$ input edges
-(we follow this convention). TEPS therefore overstates the edges actually touched by about
-$20\times$, and a model must be based on the real work (Section~\ref{sec:model}).
+\paragraph{How much work is really done.} We added a counter for the examined edges
+(\texttt{-DPE\_COUNT\_EDGES}). On average over 16 searches on \texttt{kron20}, one search does
+4.25 top-down steps and 2.5 bottom-up steps. It examines \num{286935} edges in top-down and
+\num{1202922} edges in bottom-up, which is only \SI{4.7}{\percent} of the \num{31399382}
+directed edges. Bottom-up checks \num{1659885} vertices in total, and most of them find a
+parent before they have read one full cache line of neighbours. The usual metric for BFS is
+traversed edges per second (TEPS), which counts all $m$ edges of the graph. We use it as well,
+but it overestimates the real work by about 20 times, so our model is based on the counted
+work (Section~\ref{sec:model}).

@@ -1,35 +1,23 @@
 % Owner: Sergiu
 \section{Introduction}
 
-Graph traversal is a computational dwarf whose performance is governed by irregular memory
-accesses rather than arithmetic. Breadth-first search (BFS) is its canonical kernel: it is the
-first kernel of Graph500~\cite{graph500} and of the GAP Benchmark Suite (\gapbs)~\cite{beamer2015gap}.
-Its intensity is far below one operation per byte, so useful
-models must describe data movement, latency and synchronisation instead of floating-point
-throughput.
+Breadth-first search (BFS) is the typical example of the graph traversal dwarf. It is the
+main kernel of Graph500~\cite{graph500} and one of the six kernels of the GAP Benchmark Suite
+(\gapbs)~\cite{beamer2015gap}. BFS does almost no arithmetic. Its speed depends on how fast
+it can get data from memory, and most of these accesses are random. Because of this, a
+model of BFS has to describe data movement, latency and synchronisation, and not
+floating-point operations.
 
-The goal of this project is not the fastest possible BFS. It is a systematic performance
-engineering process applied to the \gapbs{} reference implementation: (i)~analysing it with
-several tools whose correctness we check, (ii)~explaining the measurements with a
-semi-analytical model whose parameters come from our own benchmarks, and (iii)~choosing,
-implementing and assessing optimisations that the analysis and the model motivate.
+The goal of the project was not to write the fastest BFS, but to go through the full
+performance engineering process with the \gapbs{} reference code:
+\begin{enumerate}
+  \item analyse the program with more than one tool, and check that the tools give correct
+        results,
+  \item explain the measurements with a model whose parameters we measured ourselves,
+  \item choose, implement and test optimisations based on the analysis and the model.
+\end{enumerate}
 
-Our contributions are:
-\begin{itemize}
-  \item a measurement pipeline that runs every experiment from one script per platform, with
-        compile-time switches that leave the default build identical to upstream
-        (Section~\ref{sec:method});
-  \item a cross-validation of five measurement tools, including the observation that gprof
-        cannot attribute time in OpenMP code, and a latent data race in the bottom-up step
-        that appears when the OpenMP schedule is changed (Section~\ref{sec:analysis});
-  \item a traffic and latency model based on instrumented edge counts, which explains the
-        single-thread and laptop results and isolates the synchronisation overhead on a
-        128-core node (Section~\ref{sec:model});
-  \item an evaluation of seven optimisation strategies on two architectures
-        (Section~\ref{sec:opt}).
-\end{itemize}
-
-Our work plan targeted a laptop and a cluster with hardware counters. The HAICGU cluster was
-not available to us, so we used the RUG Hábrók cluster instead. We also extended the planned
-compiler-level optimisations with memory-subsystem and parallel-runtime optimisations, because
-the analysis showed that these dominate.
+In our work plan we wanted to use a laptop and the HAICGU cluster. We did not get access to
+HAICGU, so we used the Hábrók cluster of the university instead. We also did more
+memory and OpenMP optimisations than planned, because the analysis showed that these parts
+take most of the time, and fewer compiler optimisations.

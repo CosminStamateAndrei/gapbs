@@ -1,42 +1,35 @@
 \documentclass[11pt,a4paper]{article}
-\usepackage[margin=2.3cm]{geometry}
+\usepackage[margin=2.5cm]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{lmodern,microtype}
+\usepackage{lmodern}
 \usepackage{graphicx,booktabs,siunitx,xcolor,amsmath}
 \usepackage[hidelinks]{hyperref}
-\usepackage{listings}
 \usepackage{caption}
-\captionsetup{font=small}
-\lstset{basicstyle=\ttfamily\footnotesize,columns=fullflexible,frame=single}
-\sisetup{group-separator={,}}
-\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\sisetup{group-separator={,},range-phrase={ to }}
 \newcommand{\gapbs}{GAPBS}
 
-\title{Performance Analysis, Modelling and Optimisation of\\Direction-Optimising Breadth-First Search (GAPBS)}
-\author{Sergiu Alexandru Macra (s5524032) \and Cosmin Andrei Stamate (s5600723)\\[2pt]
-\small Group 1 --- Performance Engineering (WMCS045-05), University of Groningen}
-\date{Draft, 16 October 2026}
+\title{Performance Engineering\\Project: Breadth-First Search in GAPBS}
+\author{Group1\\Sergiu Alexandru Macra s5524032\\Cosmin Andrei Stamate s5600723}
+\date{October 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-\noindent We study the breadth-first search (BFS) kernel of the GAP Benchmark Suite on two
-systems: a laptop with a hybrid Intel Core i7-12650H (run under WSL2) and a dual-socket
-AMD EPYC 7763 node of the Hábrók cluster. With perf, PAPI, gprof, a perf\_event-based
-counter tool of our own and the benchmark's timers, all cross-validated, we identify the
-bottom-up step and OpenMP synchronisation as the dominant costs. Instrumenting the kernel
-shows that direction-optimising BFS examines only \SI{4.7}{\percent} of the edges of a
-Kronecker graph with $2^{20}$ vertices. A traffic model built from these counts, STREAM
-bandwidth and measured latency and memory-level parallelism predicts single-thread
-performance within \SIrange{21}{30}{\percent}. It shows that the laptop is bandwidth-bound,
-while the server node is limited by synchronisation and cross-socket effects. Of seven
-optimisation strategies, three gave significant gains: degree-ordered relabelling (up to
-$2.8\times$, also cutting the edges examined by up to \SI{48}{\percent}), choosing the thread
-count and placement ($2.1\times$ on the server), and NUMA-aware first touch of the graph
-($2.1\times$ with threads spread over both sockets). As the analysis predicts, compiler
-flags, schedules, huge pages and prefetching stayed within run-to-run noise.
+\noindent We looked at the breadth-first search (BFS) kernel of the GAP Benchmark Suite on
+two systems: our laptop (Intel Core i7-12650H, under WSL2) and one node of the Hábrók
+cluster (two AMD EPYC 7763). We measured it with perf, PAPI, gprof, the timers of the
+benchmark and a small counter tool we wrote ourselves, and we checked these tools against
+each other. Most of the time goes to the bottom-up step and to threads waiting at OpenMP
+barriers. By counting the work, we found that a search only looks at \SI{4.7}{\percent} of
+the edges of the graph. Our model, based on this count and on the measured bandwidth,
+latency and memory-level parallelism, shows that one thread is limited by memory latency,
+the laptop with all threads by memory bandwidth, and the Hábrók node by synchronisation and
+the two sockets. We tried seven optimisations. Three of them gave a clear improvement:
+relabelling the vertices by degree (2.4 times faster on the laptop, 1.8 times on Hábrók for
+a larger graph), using fewer threads on one socket (2.1 times) and spreading the graph over
+both NUMA nodes (2.1 times when the threads are spread). Compiler flags, schedules, huge pages and prefetching stayed within the noise.
 \end{abstract}
 
 \input{sections/01_intro}
@@ -48,7 +41,20 @@ flags, schedules, huge pages and prefetching stayed within run-to-run noise.
 \input{sections/07_optimisation}
 \input{sections/08_conclusion}
 
-\bibliographystyle{plain}
+\section{Workload distribution}
+\begin{center}
+\begin{tabular}{|l|l|}
+\hline
+Name & Parts \\
+\hline
+Cosmin Andrei Stamate & laptop measurements, Sections 3, 4, 5, 7.1, 7.2 \\
+Sergiu Alexandru Macra & Hábrók measurements, Sections 1, 2, 6, 7.3 to 7.7 \\
+Both & scripts, analysis, Section 8 \\
+\hline
+\end{tabular}
+\captionof{table}{Workload}
+\end{center}
+
 \begin{thebibliography}{9}
 \bibitem{beamer2015gap} S.~Beamer, K.~Asanović, D.~Patterson. \emph{The GAP Benchmark Suite}. arXiv:1508.03619, 2015.
 \bibitem{beamer2012do} S.~Beamer, K.~Asanović, D.~Patterson. \emph{Direction-Optimizing Breadth-First Search}. SC'12, 2012.
@@ -60,6 +66,6 @@ flags, schedules, huge pages and prefetching stayed within run-to-run noise.
 
 \appendix
 \section*{Code and data}
-All code, scripts and raw results: \url{https://github.com/CosminStamateAndrei/gapbs}
-(directory \texttt{pe/}; \texttt{pe/README.md} explains how every result is reproduced).
+All code, scripts and raw results are in \url{https://github.com/CosminStamateAndrei/gapbs}
+(folder \texttt{pe/}). The file \texttt{pe/README.md} explains how to reproduce every result.
 \end{document}

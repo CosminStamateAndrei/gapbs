@@ -2,31 +2,36 @@
 \section{Discussion and conclusion}
 \label{sec:conclusion}
 
-\paragraph{What limits BFS.} Combining profiles, edge counts and the model gives a
-consistent picture. A single core is latency-bound: it cannot keep enough misses in flight.
-A laptop with all cores is bandwidth-bound and already beyond its DRAM bound thanks to L3
-reuse. A 128-core server is bound by neither: synchronisation at about ten barriers per
-search and cross-socket effects dominate. The optimisations confirm this. The significant ones reduce memory traffic or work
-(relabelling), synchronisation span (fewer, socket-local threads), or remote memory traffic
-(NUMA-aware first touch). Those that target instruction count (compiler flags, vectorisation) or a
-minor kernel (prefetching in top-down) were not. This matches the course's message: the
-justification from analysis and model predicted which strategies could pay off before they
-were implemented.
+\paragraph{What limits BFS.} The profiles, the edge counts and the model all point in the same
+direction. One core is limited by latency, because it cannot keep enough misses open. The
+laptop with all threads is limited by bandwidth, and it is even faster than its main memory
+bound because of the L3. The 128-core Hábrók node is limited by neither of them, but by
+synchronisation (about ten barriers per search) and by the two sockets. The optimisations
+confirm this. The ones that helped reduce the data or the work (relabelling), the number of
+threads that have to synchronise (fewer threads on one socket), or the remote memory traffic
+(first touch). The ones that only change the instructions (compiler options, vectorisation)
+or a small part of the program (prefetching in top-down) did not help. In most cases the
+analysis and the model told us in advance which optimisations could work.
 
-\paragraph{Threats to validity.}
-(i)~The laptop ran under WSL2: no hardware counters, a hidden hybrid topology and high
-variance (IQR up to \SI{56}{\percent}). We therefore use medians and treat differences within
-the IQR as insignificant. (ii)~The model assumes every byte comes from DRAM; this is why the
-laptop beats its bound. A cache-aware refinement would use the L3 bandwidth for the
-\SI{4}{MB} \texttt{parent} array. (iii)~Hábrók's counters were multiplexed, and the 128-thread counter runs include warm-up
-trials, so we use only single-thread counters quantitatively.
-(iv)~Relabelling changes the source vertices. (v)~\texttt{kron20} is small for a 128-core
-node. Results on \texttt{kron22}/\texttt{kron24} show the expected higher GTEPS with
-growing work per barrier (\SI{6.8}{GTEPS} on \texttt{kron24}).
+\paragraph{Limitations.}
+\begin{itemize}
+  \item The laptop runs under WSL2: no hardware counters, P-cores and E-cores cannot be told
+        apart, and a lot of noise (IQR up to \SI{56}{\percent}). This is why we use the median
+        and only accept differences larger than the IQR.
+  \item The model assumes that all data comes from main memory, which is why the laptop is
+        faster than its bound. A version that takes the caches into account would use the L3
+        bandwidth for the \SI{4}{MB} \texttt{parent} array.
+  \item The counters on Hábrók were multiplexed, and the counter runs with 128 threads include
+        the slow first searches, so we only use the single-thread counters as exact numbers.
+  \item Relabelling changes the source vertices of the searches.
+  \item \texttt{kron20} is a small graph for 128 cores. On \texttt{kron22} and \texttt{kron24}
+        the GTEPS are higher, because there is more work per barrier (\SI{6.8}{GTEPS} on
+        \texttt{kron24}).
+\end{itemize}
 
-\paragraph{Future work.} Hardware counters on the laptop through a native Linux boot, which
-would also allow a top-down microarchitecture analysis; the Apple Silicon comparison planned
-in our work plan; a branch-free bitmap test in \texttt{BUStep} against the
-\SI{12.9}{\percent} misprediction rate; a NUMA-aware partitioning of the bottom-up sweep; and
-fusing the short parallel regions of a BFS level to remove barriers, analogous to loop
-fusion. The last one addresses the dominant cost we identified.
+\paragraph{Future work.} Hardware counters on the laptop with a native Linux, which would also
+allow a top-down microarchitecture analysis; the comparison with Apple Silicon from our work
+plan; a bit test without branches in \texttt{BUStep} against the \SI{12.9}{\percent}
+mispredictions; splitting the bottom-up loop by NUMA node; and merging the short parallel
+regions of one BFS level to have fewer barriers, similar to loop fusion. The last one is about
+the biggest cost we found.

@@ -1,50 +1,55 @@
 % Owner: Cosmin
-\section{Computing systems and environment}
+\section{Systems and environment}
 \label{sec:systems}
 
 \begin{table}[ht]
 \centering\footnotesize
-\caption{Systems. Bandwidth and latency were measured by us (Section~\ref{sec:model}).}
+\caption{The two systems. Bandwidth and latency were measured by us (Section~\ref{sec:model}).}
 \label{tab:systems}
-\begin{tabular}{@{}p{3.3cm}p{6.0cm}p{5.4cm}@{}}
+\begin{tabular}{@{}p{3.3cm}p{5.7cm}p{5.4cm}@{}}
 \toprule
  & Laptop & Hábrók node (\texttt{regular}) \\
 \midrule
-CPU & Intel Core i7-12650H (Alder Lake) & 2$\times$ AMD EPYC 7763 (Zen 3) \\
-Cores & 6 P + 4 E (16 threads); WSL2 exposes 10 vCPUs & 2$\times$64, SMT off, 2 NUMA nodes \\
-Caches & L2 \SI{1.25}{MB}/core, L3 \SI{24}{MB} shared & L2 \SI{512}{KB}/core, L3 16$\times$\SI{32}{MB} (one per CCD) \\
-Memory visible & \SI{7.6}{GB} (WSL2 share) & \SI{503}{GB} \\
+CPU & Intel Core i7-12650H & 2 $\times$ AMD EPYC 7763 (Zen 3) \\
+Cores & 6 P-cores + 4 E-cores (16 threads), WSL2 shows 10 vCPUs & 2 $\times$ 64 cores, no SMT, 2 NUMA nodes \\
+Caches & L1d \SI{48}{KiB} per core, L3 \SI{24}{MiB} & L2 \SI{512}{KiB} per core, L3 16 $\times$ \SI{32}{MiB} (one per CCD) \\
+Memory & one DDR4-3200 channel (\SI{25.6}{GB/s} peak), \SI{7.6}{GiB} visible in WSL2 & \SI{503}{GiB} \\
 STREAM triad, all / 1 thread & \SI{15.9}{GB/s} / \SI{12.3}{GB/s} & \SI{327}{GB/s} / \SI{34.7}{GB/s} \\
 Load latency at \SI{1}{GB} & \SI{376}{ns} & \SI{99}{ns} \\
-OS, kernel & Ubuntu 24.04.1 on WSL2, Linux 6.18 & AlmaLinux 9.8 \\
+OS & Ubuntu 24.04.1 on WSL2, Linux 6.18 & AlmaLinux 9.8 \\
 Compiler & GCC 13.3, \texttt{-O3 -fopenmp} & GCC 11.5, \texttt{-O3 -fopenmp} \\
 Transparent huge pages & \texttt{madvise} (default) & \texttt{always} \\
-Tools & perf 6.18 (software events, sampling), gprof & PAPI 7.1 (built by us), pecount, gprof \\
+Tools & perf 6.18 (software events and sampling), gprof & PAPI 7.1 (built by us), pecount, gprof \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:systems} summarises the two systems. Both builds use \texttt{-g
--fno-omit-frame-pointer} so that call graphs can be sampled; this does not change the
-generated loop code.
+Table~\ref{tab:systems} shows the two systems. All builds also use \texttt{-g
+-fno-omit-frame-pointer}, so that perf can record call graphs. This does not change the code
+of the loops.
 
-\paragraph{Laptop under WSL2.} WSL2 runs Linux in a Hyper-V virtual machine. This has three
-consequences, which we state here because they bound what the laptop results can show.
-(i)~The hardware performance-monitoring unit is not passed through: all hardware events
-(cycles, instructions, cache and TLB misses) report \emph{not supported}. Only software
-events and timer-based sampling are available. (ii)~The VM exposes 10 virtual CPUs without
-hybrid topology, so P- and E-cores cannot be told apart or selected. (iii)~Guest memory is
-translated twice (nested paging), which partly explains the high DRAM latency of
-\SI{376}{ns} and adds variance. The laptop's sustainable bandwidth of \SI{15.9}{GB/s} is
-low for this CPU; we use it as measured. We planned to boot a native Linux on the laptop
-for hardware counters, but this was not possible in our time frame, so counters come from
-Hábrók.
+\paragraph{Laptop under WSL2.} WSL2 runs Linux in a Hyper-V virtual machine, and this limits
+what we can measure on the laptop:
+\begin{itemize}
+  \item The hardware counters are not passed through to the virtual machine. All hardware
+        events (cycles, instructions, cache and TLB misses) give \emph{not supported}. Only
+        software events and timer-based sampling work.
+  \item The virtual machine shows 10 vCPUs and does not tell which ones are P-cores and
+        which are E-cores, so we cannot choose between them.
+  \item The memory addresses are translated twice (nested paging). This is probably one
+        reason for the high memory latency of \SI{376}{ns}, and it also adds noise.
+\end{itemize}
+The laptop has only one memory channel with a peak of \SI{25.6}{GB/s}. STREAM reaches
+\SI{15.9}{GB/s} with all threads, which is \SI{62}{\percent} of the peak. In Assignment 6 we
+saw on the same laptop that STREAM is fastest with about four threads and gets slower with
+more threads. We wanted to boot a native Linux on the laptop to get hardware counters, but we
+did not manage this in time, so all hardware counters come from Hábrók.
 
-\paragraph{Hábrók.} The cluster provides neither \texttt{perf}, \texttt{numactl} nor a PAPI
-module, and \texttt{perf\_event\_paranoid} is 2 (user-space counting only). We therefore built
-PAPI~7.1 from source in our home directory. We also wrote \texttt{pecount}
-(\texttt{pe/bench/pecount.c}, 200 lines), which counts a command's events through
-\texttt{perf\_event\_open} like \texttt{perf stat}. All Hábrók runs used one exclusive node
-through Slurm. Even so, our counters were scheduled only \SIrange{14}{26}{\percent} of the
-time when several were open, which indicates that other software on the node also uses the
-counter hardware. We therefore rely on PAPI regions with few events for quantitative counts.
+\paragraph{Hábrók.} The compute nodes have no \texttt{perf}, no \texttt{numactl} and no PAPI
+module, and \texttt{perf\_event\_paranoid} is set to 2, so we can only count events in user
+space. We therefore built PAPI 7.1 from source in our home directory. We also wrote
+\texttt{pecount} (\texttt{pe/bench/pecount.c}, about 200 lines), which counts the events of a
+program with \texttt{perf\_event\_open}, like \texttt{perf stat} does. All Hábrók runs used one
+full node (exclusive) through Slurm. Still, when several counters were open, they were only
+active \SIrange{14}{26}{\percent} of the time. Probably other software on the node also uses
+the counters. For exact counts we therefore use PAPI regions with only a few events.

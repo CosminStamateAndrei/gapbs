@@ -49,7 +49,7 @@
   {\color{white}\fontsize{24}{28}\selectfont\bfseries Performance Engineering of\\[2pt]
    Direction-Optimising BFS (GAPBS)\par}
   \vspace*{0.25cm}
-  {\color{white}\large\bfseries WMCS045-05 \textperiodcentered{} Group 1\par}
+  {\color{white}\large\bfseries WMCS045-05, Group 1\par}
   \vspace*{1.3cm}
   {\color{white}\bfseries Sergiu Alexandru Macra \quad Cosmin Andrei Stamate\par}
   \vspace*{0.1cm}
@@ -129,7 +129,7 @@
   \begin{itemize}\setlength{\itemsep}{3pt}
     \item No HAICGU access $\Rightarrow$ Hábrók instead. No perf, PAPI or numactl there:
           we \textbf{built PAPI} and wrote \textbf{pecount} (\texttt{perf\_event\_open}, 200 lines)
-    \item Everything runs from one batch script per platform; 30 variants via compile-time switches
+    \item Everything runs from one batch script per platform; 27 variants via compile-time switches
   \end{itemize}
 \end{frame}
 
@@ -139,7 +139,7 @@
     \begin{column}{0.5\textwidth}
       \begin{itemize}\setlength{\itemsep}{5pt}
         \item 1 discarded run, then 5 processes $\times$ 24 searches
-        \item \textbf{Drop trials 1--5} of each process: warm-up is up to 50$\times$ slower on Hábrók
+        \item \textbf{Drop searches 1 to 5} of every run: the first ones are up to 50$\times$ slower on Hábrók
         \item Report \textbf{median and IQR}; GTEPS $=m/t$
         \item Significant only if the difference exceeds \textbf{both IQRs}
         \item \textbf{Every variant must pass the BFS verifier} before it is timed
@@ -225,9 +225,9 @@
         Kernel & Cycles & IPC & Misses \\
         \midrule
         \texttt{BUStep} & \SI{78}{\percent} & 0.77 & 0.32 / vertex \\
-        \texttt{InitParent} & \SI{14}{\percent} & 0.89 & -- \\
+        \texttt{InitParent} & \SI{14}{\percent} & 0.89 & - \\
         \texttt{TDStep} & \SI{4}{\percent} & 1.01 & 0.75 / edge \\
-        conversions & \SI{4}{\percent} & 1.6--4.8 & -- \\
+        conversions & \SI{4}{\percent} & 1.6 to 4.8 & - \\
         \bottomrule
       \end{tabular}\\[4pt]
       \footnotesize memory-bound: low IPC; TLB irrelevant with THP (4.2k misses / search)
@@ -239,7 +239,7 @@
 \begin{frame}{Thread scaling}
   \centering\fig[width=0.92\linewidth]{scaling}
   \begin{itemize}\small
-    \item Laptop: flat beyond 8 threads. Hábrók: best at \hl{48--64 bound threads} (one
+    \item Laptop: flat beyond 8 threads. Hábrók: best at \hl{48 to 64 bound threads} (one
           socket), \alert{slower again at 128}
     \item The server has 13$\times$ the cores and 20$\times$ the bandwidth, but is only 3$\times$ faster. Why?
   \end{itemize}
@@ -294,7 +294,7 @@
               Hábrók keeps only $\approx$8 of 22 possible misses (MSHRs) in flight
         \item \textbf{Laptop, all threads: bandwidth-bound}\\ 8.4\,ms vs.\ 11.3\,ms DRAM bound
               (L3 reuse) $\Rightarrow$ no headroom
-        \item \textbf{Hábrók: neither}\\ 2.5--6.5$\times$ above both bounds:
+        \item \textbf{Hábrók: neither}\\ 2.5 to 6.5$\times$ above both bounds:
               \hl{barriers, imbalance, cross-socket traffic}
       \end{enumerate}
     \end{column}
@@ -311,7 +311,7 @@
   \end{tabular}
 \end{frame}
 
-\begin{frame}{O5: degree relabelling (up to 2.8$\times$)}
+\begin{frame}{O5: relabelling by degree (2.4$\times$)}
   \begin{columns}[c]
     \begin{column}{0.5\textwidth}
       \small
@@ -321,9 +321,8 @@
               \emph{first} in every sorted neighbour list
         \item Bottom-up hits a frontier vertex sooner:\\
               \hl{$-35\,\%$} edges examined (kron20), \hl{$-48\,\%$} (kron22)
-        \item Laptop 8.58 $\to$ \textbf{3.53\,ms} (2.4$\times$); kron22: 2.8$\times$ laptop,
-              1.8$\times$ Hábrók
-        \item Caveat: \SI{0.46}{s} one-off cost, amortised after $\approx$90 searches
+        \item Laptop 8.58 $\to$ \textbf{3.53\,ms} (2.4$\times$); Hábrók kron22: 1.8$\times$
+        \item Note: relabelling takes \SI{0.46}{s} once, paid back after about 90 searches
       \end{itemize}
     \end{column}
     \begin{column}{0.47\textwidth}
@@ -382,11 +381,11 @@
   \begin{itemize}\setlength{\itemsep}{6pt}
     \item BFS is about \textbf{memory and synchronisation}, not arithmetic: IPC $\approx$ 1,
           4.7\,\% of edges touched
-    \item 1 core: latency-bound \textperiodcentered{} laptop: bandwidth-bound \textperiodcentered{}
-          128-core node: \hl{barrier- and NUMA-bound}
+    \item 1 core is limited by latency, the laptop by bandwidth, and the 128-core node by
+          \hl{barriers and NUMA}
     \item Validated toolchain: perf, PAPI, pecount, timers; gprof fails on OpenMP;
           verification exposed a data race
-    \item Best gains: \hl{relabelling (2.8$\times$)}, \hl{socket-local threads (2.1$\times$)},
+    \item Best gains: \hl{relabelling (2.4$\times$)}, \hl{socket-local threads (2.1$\times$)},
           \hl{NUMA first touch (2.1$\times$)}
     \item Next: fuse a level's parallel regions to cut barriers; native-Linux laptop counters
   \end{itemize}

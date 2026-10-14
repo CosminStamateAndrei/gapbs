@@ -1,7 +1,7 @@
 # Speaker notes (20 min + 5 min Q&A)
 
-Split: **Cosmin** slides 1–9 (application, systems, method, analysis, ~10 min),
-**Sergiu** slides 10–17 (model, optimisations, conclusions, ~10 min). About 70 s per slide.
+Split: **Cosmin** slides 1 to 9 (application, systems, method, analysis, ~10 min),
+**Sergiu** slides 10 to 17 (model, optimisations, conclusions, ~10 min). About 70 s per slide.
 
 | # | Slide | Who | Time | Key message |
 |---|---|---|---|---|
@@ -10,14 +10,14 @@ Split: **Cosmin** slides 1–9 (application, systems, method, analysis, ~10 min)
 | 3 | Application | C | 1:30 | Top-down vs bottom-up; **only 4.7 % of edges are examined**, so TEPS overstates the work about 20× |
 | 4 | Systems | C | 1:00 | WSL2 hides counters; Hábrók had no perf/PAPI, so we built PAPI and wrote pecount |
 | 5 | Method | C | 1:00 | Medians + IQR, drop 5 warm-up trials, significant = beyond both IQRs, verify everything |
-| 6 | Tool validation | C | 1:30 | Tools agree within 1–10 %; known answers exact; gprof fails on OpenMP; multiplexing breaks scaling |
+| 6 | Tool validation | C | 1:30 | Tools agree within 1 to 10 %; known answers exact; gprof fails on OpenMP; multiplexing breaks scaling |
 | 7 | Data race | C | 1:00 | Non-atomic bitmap writes; chunk size must be a multiple of 64 |
 | 8 | Hotspots | C | 1:30 | 50 % barrier spin (laptop); BUStep 78 % of cycles; IPC ≈ 1 → memory-bound |
-| 9 | Scaling | C | 1:00 | Hábrók best at 48–64 bound threads; slower at 128. "Why only 3× faster?" → hand over |
+| 9 | Scaling | C | 1:00 | Hábrók best at 48 to 64 bound threads; slower at 128. "Why only 3× faster?" → hand over |
 | 10 | Model | S | 1:30 | Why not roofline/ECM; T_bw and T_lat with measured Q, N_rand, B, L, MLP |
 | 11 | Model vs measurement | S | 1:30 | Three regimes: latency → bandwidth → synchronisation/NUMA |
 | 12 | Optimisations overview | S | 1:00 | Significant vs within noise |
-| 13 | Relabelling | S | 1:30 | Fewer edges examined (−35/−48 %) + locality; one-off cost |
+| 13 | Relabelling | S | 1:30 | Fewer edges examined (35 % and 48 % fewer) and better locality; one-off cost |
 | 14 | Threads + NUMA | S | 1:30 | Socket-local threads 2.1×; first touch 2.1× with spread binding |
 | 15 | What didn't help | S | 1:00 | Each null result was predicted by analysis/model |
 | 16 | Conclusions | S | 1:00 | Memory + synchronisation; three wins; next: fuse parallel regions |
