@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Times one BFS configuration and appends one CSV row per trial.
-#   run_bfs.sh BINARY VARIANT [REPS] [TRIALS]
-# Env:
-#   GRAPH     graph file (default kron20.sg in repo root)
-#   CSV       output file (default pe/results/<machine>/timings.csv)
-#   PREFIX    command prefix, e.g. "taskset -c 0-11"
-#   CORESET   label for the core set (default all)
-#   OMP_NUM_THREADS / OMP_PROC_BIND / OMP_PLACES / OMP_SCHEDULE as usual
-# One extra run is done first and discarded (process-level warm-up). Every trial
-# is kept, including the slow first trials of each process; analysis drops them.
 set -u
 . "$(dirname "$0")/common.sh"
 

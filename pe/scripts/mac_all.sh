@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# All Apple Silicon measurements (Sergiu). From the repo root:
-#     brew install gcc            # once; note the version, e.g. g++-15
-#     CXX=g++-15 CC=gcc-15 bash pe/scripts/mac_all.sh
-# Then do the Instruments steps in pe/README.md and push pe/results/mac.
-# macOS cannot pin threads, so there are no core-set or binding experiments.
 set -u
 export MACHINE=mac
 . "$(dirname "$0")/common.sh"
@@ -65,7 +60,6 @@ stream() {
   OMP_NUM_THREADS=1 "$BIN/stream" > "$OUT/stream_1T.txt"
 }
 known_answer() {
-  # runs to record with Instruments > CPU Counters (see README); timing only here
   "$BIN/microbench" alu 1000000000 > "$OUT/known_answer.txt"
   "$BIN/microbench" chase 1048576 10000000 >> "$OUT/known_answer.txt"
   otool -tvV "$BIN/microbench" | awk '/_do_alu:/,/^_do_chase:/' > "$OUT/known_answer_alu_disasm.txt"

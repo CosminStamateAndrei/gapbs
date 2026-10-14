@@ -1,18 +1,3 @@
-// pecount: minimal "perf stat" replacement built directly on perf_event_open(2),
-// for machines where the perf tool is not installed (e.g. Hábrók compute nodes).
-// Counts user-space events of a command and all its threads (inherit=1), so it
-// works with perf_event_paranoid=2 without root.
-//
-//   pecount [-x,] [-r N] -e ev1,ev2,... [-o out.csv] -- command args...
-//
-// Output follows `perf stat -x,` so pe/scripts/analyze.py reads both:
-//   value,unit,event,stddev%,time_running,pct_running
-// Values are means over N runs, scaled for multiplexing like perf does.
-// Supported events: cycles instructions branches branch-misses cache-references
-// cache-misses L1-dcache-loads L1-dcache-load-misses LLC-loads LLC-load-misses
-// dTLB-loads dTLB-load-misses task-clock page-faults context-switches
-// cpu-migrations duration_time (a ":u" suffix is accepted and ignored).
-
 #define _GNU_SOURCE
 #include <errno.h>
 #include <linux/perf_event.h>
@@ -79,7 +64,7 @@ int main(int argc, char **argv) {
   }
   char *names[MAXEV]; int nev = 0;
   for (char *tok = strtok(evs, ","); tok && nev < MAXEV; tok = strtok(NULL, ",")) {
-    char *c = strchr(tok, ':'); if (c) *c = 0;      // drop :u
+    char *c = strchr(tok, ':'); if (c) *c = 0;
     names[nev++] = tok;
   }
   double sum[MAXEV] = {0}, sum2[MAXEV] = {0}, run_pct[MAXEV] = {0};
@@ -109,10 +94,6 @@ int main(int argc, char **argv) {
       memset(&a, 0, sizeof(a));
       a.size = sizeof(a); a.type = d->type; a.config = d->config;
       a.disabled = 1; a.enable_on_exec = 1; a.inherit = 1;
-      // Hardware events: user space only (like PAPI's default domain, and
-      // allowed with perf_event_paranoid=2). Software events (page faults,
-      // task-clock) include kernel time when permitted: most page faults
-      // happen inside read() while the graph file is copied in.
       a.exclude_kernel = (d->type != PERF_TYPE_SOFTWARE); a.exclude_hv = 1;
       a.read_format = PERF_FORMAT_TOTAL_TIME_ENABLED | PERF_FORMAT_TOTAL_TIME_RUNNING;
       fd[e] = (int)peo(&a, pid);

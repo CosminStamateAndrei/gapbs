@@ -1,10 +1,4 @@
 #!/bin/bash
-# Hábrók (RUG HPC) job: the full study on one exclusive compute node.
-# From the repo root on a login node:
-#     curl -fsSL -o pe/bench/stream.c https://www.cs.virginia.edu/stream/FTP/Code/stream.c
-#     sbatch pe/scripts/habrok_job.sh
-#     squeue -u $USER                      # wait for it; output in gapbs-<jobid>.out
-# Results land in pe/results/habrok/; commit and push them from the login node.
 #SBATCH --job-name=gapbs-bfs
 #SBATCH --partition=regular
 #SBATCH --nodes=1
@@ -17,7 +11,6 @@ set -u
 cd "${SLURM_SUBMIT_DIR:-.}"
 
 module purge
-# PAPI's EasyBuild module brings its own matching GCC; fall back to plain GCC
 if module -t avail PAPI 2>&1 | grep -q '^PAPI'; then
   module load PAPI
 else

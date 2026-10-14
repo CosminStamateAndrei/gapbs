@@ -1,9 +1,4 @@
 #!/bin/bash
-# Second Hábrók job: hardware counters only (the first job had no perf/PAPI).
-# Uses PAPI from ~/opt/papi (pe/scripts/install_papi.sh) and pecount, our
-# perf_event_open-based replacement for `perf stat`. Timing runs are skipped
-# (NO_TIMING=1), except the new NUMA first-touch experiment.
-#     sbatch pe/scripts/habrok_counters_job.sh
 #SBATCH --job-name=gapbs-counters
 #SBATCH --partition=regular
 #SBATCH --nodes=1
@@ -23,6 +18,5 @@ export LD_LIBRARY_PATH=$P/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 echo "node $(hostname), $(nproc) CPUs, papi: $(command -v papi_avail || echo missing)"
 papi_avail 2>&1 | grep -E 'PAPI version|Number Hardware Counters|PAPI_TOT_CYC|PAPI_L2_DCM|PAPI_L3_TCM'
 
-# override with: sbatch --export=ALL,ONLY="build mlp" pe/scripts/habrok_counters_job.sh
 ONLY=${ONLY:-"sysinfo build verify timers counters_base known_answer papi mlp o1_compiler o3_hugepages o4_prefetch o5_relabel big_graph o6_first_touch package"} \
 NO_TIMING=1 MACHINE=habrok SKIP_APT=1 SET_SYS=0 bash pe/scripts/batch_all.sh

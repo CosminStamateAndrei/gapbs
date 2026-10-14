@@ -15,6 +15,5 @@ benchmark/graphs/*.sg
 benchmark/graphs/*.wsg
 benchmark/graphs/raw/*
 
-# graphs (too large for GitHub; regenerate with ./converter -g 20 -b kron20.sg)
 /*.sg
 /*.wsg

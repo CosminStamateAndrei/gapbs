@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
-# All x86 measurements in one session. Run as root from the repo root on the
-# native Ubuntu live USB:
-#     GH_TOKEN=<token> bash pe/scripts/batch_all.sh
-# Smoke test in WSL (1 rep, short, no apt, no sysfs writes; HW counters will
-# show <not supported> there, which is expected):
-#     QUICK=1 bash pe/scripts/batch_all.sh
-# A failing step is logged and skipped; the list of failures is printed at the end.
-# Expected duration of the full run: ~30-45 min.
 set -u
-export MACHINE=${MACHINE:-x86}     # MACHINE=wsl keeps WSL results separate
+export MACHINE=${MACHINE:-x86}
 . "$(dirname "$0")/common.sh"
 cd "$ROOT"
 
@@ -19,32 +11,28 @@ if [ "$QUICK" = 1 ]; then
 else
   export REPS=${REPS:-5} TRIALS=${TRIALS:-24}; PSTAT_R=5; NTR=64; SKIP_APT=${SKIP_APT:-0}; SET_SYS=${SET_SYS:-1}
 fi
-# SET_SYS=0 (cluster, WSL): no sysctl / governor / THP-mode changes (needs root)
 export CSV=$OUT/timings.csv
 PERF=$OUT/perf; mkdir -p "$PERF"
 chmod +x "$ROOT"/pe/scripts/*.sh
 RUN="$ROOT/pe/scripts/run_bfs.sh"
-RUN_T=$RUN                             # always times, even with NO_TIMING=1
-[ "${NO_TIMING:-0}" = 1 ] && RUN=true   # counters-only re-run: skip timing runs
-# perf if installed, otherwise our perf_event_open wrapper (same CSV format)
+RUN_T=$RUN
+[ "${NO_TIMING:-0}" = 1 ] && RUN=true
 if command -v perf > /dev/null; then PSTAT="perf stat"; else PSTAT="$ROOT/pe/bin/pecount"; fi
 log "batch_all start (QUICK=$QUICK) on $(hostname), kernel $(uname -r)"
 
 P=$(pcores); E=$(ecores)
 NLOG=$(ncpu); NPHYS=$(nphys)
 [ -z "$P" ] && P="0-$((NLOG-1))"
-P0=${P%%[-,]*}                       # first P-core
-E0=${E%%[-,]*}                       # first E-core (may be empty)
+P0=${P%%[-,]*}
+E0=${E%%[-,]*}
 NP=$(cpulist_count "$P")
 log "logical CPUs $NLOG, physical cores $NPHYS, P-cores [$P] ($NP), E-cores [${E:-none}]"
 
-# ---------------------------------------------------------------- helpers
 G1="cycles,instructions,branches,branch-misses"
 G2="cache-references,cache-misses,LLC-loads,LLC-load-misses"
 G3="L1-dcache-loads,L1-dcache-load-misses,dTLB-loads,dTLB-load-misses"
 G4="task-clock,page-faults,context-switches,cpu-migrations"
 
-# pstat VARIANT BINARY "GROUPS"   -> perf stat for -n 0 and -n NTR, per group
 pstat() {
   local v=$1 b=$2 groups=$3 g i=0
   for g in $groups; do
@@ -57,7 +45,6 @@ pstat() {
 }
 ALLG="$G1 $G2 $G3 $G4"
 
-# ---------------------------------------------------------------- 1 setup
 setup() {
   if [ "$SKIP_APT" != 1 ]; then
     add-apt-repository -y universe || true
@@ -68,13 +55,11 @@ setup() {
   if [ "$SET_SYS" = 1 ]; then
     sysctl -w kernel.perf_event_paranoid=-1
     sysctl -w kernel.kptr_restrict=0
-    # Fixed frequency policy for repeatable runs (documented in report §3)
     for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$f"; done 2>/dev/null || true
   fi
   command -v perf
 }
 
-# ---------------------------------------------------------------- 2 system info
 sysinfo() {
   {
     echo "## date";  date
@@ -99,7 +84,6 @@ sysinfo() {
   } > "$OUT/system.txt" 2>&1
 }
 
-# ---------------------------------------------------------------- 3 build + graph
 build_all() {
   bash pe/scripts/build_variants.sh
   [ -f "$GRAPH" ] || ./converter -g 20 -b "$GRAPH"
@@ -118,22 +102,19 @@ verify_all() {
   ! grep -q FAIL "$OUT/verify.txt"
 }
 
-# ---------------------------------------------------------------- 4 baseline
 baseline() {
   CORESET=all "$RUN" "$BIN/bfs_base" base
   if [ -n "$E" ]; then
     PREFIX="taskset -c $P" CORESET=P "$RUN" "$BIN/bfs_base" base
     PREFIX="taskset -c $E" CORESET=E "$RUN" "$BIN/bfs_base" base
   fi
-  # one thread per physical core (SMT siblings idle)
   OMP_NUM_THREADS=$NPHYS OMP_PROC_BIND=close OMP_PLACES=cores CORESET=all "$RUN" "$BIN/bfs_base" base-1-per-core
-  # one long run to show the per-process warm-up (first trials slower)
   CORESET=all "$RUN" "$BIN/bfs_base" base-warmup 1 128
 }
 
 scaling() {
   local list t
-  if [ "$NPHYS" -gt 32 ]; then   # server node: powers of two
+  if [ "$NPHYS" -gt 32 ]; then
     list=$(printf '%s\n' 1 2 4 8 16 32 48 64 96 128 "$NPHYS" "$NLOG" | sort -n | uniq | awk -v m="$NLOG" '$1<=m')
   else
     list=$(printf '%s\n' 1 2 4 $(seq 6 2 "$NPHYS") "$NPHYS" "$NP" "$NLOG" | sort -n | uniq | awk -v m="$NLOG" '$1<=m')
@@ -144,7 +125,6 @@ scaling() {
   done
 }
 
-# ---------------------------------------------------------------- 5 tool validation
 timers() {
   "$BIN/microbench" res > "$OUT/timer_resolution.txt"
   local r
@@ -159,7 +139,6 @@ counters_base() {
   PREFIX="" pstat base-all "$BIN/bfs_base" "$ALLG"
   PREFIX="taskset -c $P" pstat base-P "$BIN/bfs_base" "$G1 $G2 $G3"
   [ -n "$E" ] && PREFIX="taskset -c $E" pstat base-E "$BIN/bfs_base" "$G1 $G2 $G3"
-  # 1 thread on one P-core, for the perf vs PAPI cross-check
   OMP_NUM_THREADS=1 PREFIX="taskset -c $P0" pstat base-1T "$BIN/bfs_base" "$G1 $G2"
 }
 
@@ -169,10 +148,8 @@ profile() {
   perf report -i "$RAW/perf.data" --stdio --no-children --sort dso,symbol --percent-limit 0.3 -g none > "$OUT/perf_report_dso.txt"
   perf report -i "$RAW/perf.data" --stdio --no-children --sort cpu -g none > "$OUT/perf_report_cpu.txt"
   perf report -i "$RAW/perf.data" --stdio --children --sort symbol --percent-limit 1 -g caller > "$OUT/perf_report_callgraph.txt"
-  # only our binary (kernel/libgomp symbols can hang without vmlinux), time-limited
   timeout 300 perf annotate -i "$RAW/perf.data" --stdio --dsos bfs_base 2>/dev/null \
     | head -c 30000000 > "$OUT/perf_annotate_all.txt" || true
-  # same on P-cores only, to see the kernel mix without E-core skew
   taskset -c "$P" perf record -F 4999 -g -o "$RAW/perf_P.data" -- "$BIN/bfs_base" -f "$GRAPH" -n "$NTR" > /dev/null
   perf report -i "$RAW/perf_P.data" --stdio --no-children --sort symbol --percent-limit 0.3 > "$OUT/perf_report_symbols_P.txt"
 }
@@ -181,7 +158,6 @@ gprof_run() {
   local tmp; tmp=$(mktemp -d)
   (cd "$tmp" && "$BIN/bfs_pg" -f "$GRAPH" -n "$NTR" > /dev/null && gprof -b "$BIN/bfs_pg" gmon.out > "$OUT/gprof.txt")
   rm -rf "$tmp"
-  # instrumentation overhead: -pg build timed like any variant
   local tmp2; tmp2=$(mktemp -d)
   (cd "$tmp2" && CORESET=all "$RUN" "$BIN/bfs_pg" gprof-instrumented)
   rm -rf "$tmp2"
@@ -216,7 +192,6 @@ latency() {
 }
 
 mlp() {
-  # memory-level parallelism: K interleaved chases over 1 GB, one core
   local f="$OUT/mlp.csv" k
   echo "chains,ns_per_load" > "$f"
   for k in 1 2 4 6 8 10 12 16 20 24 32; do
@@ -238,15 +213,12 @@ papi() {
   local GEN="perf::PERF_COUNT_HW_CPU_CYCLES,perf::PERF_COUNT_HW_INSTRUCTIONS,perf::PERF_COUNT_HW_CACHE_REFERENCES,perf::PERF_COUNT_HW_CACHE_MISSES"
   local PRE="PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_L2_DCM,PAPI_L3_TCM"
   local d
-  # (a) 1 thread on one P-core: compare with perf base-1T (same generic events)
   d=$RAW/papi_1T; rm -rf "$d"
   OMP_NUM_THREADS=1 PAPI_EVENTS=$GEN PAPI_OUTPUT_DIRECTORY=$d taskset -c "$P0" "$BIN/bfs_papi" -f "$GRAPH" -n "$NTR" > "$OUT/papi_1T_stdout.txt"
-  # (b) all P-cores, per kernel
   d=$RAW/papi_P_generic; rm -rf "$d"
   PAPI_EVENTS=$GEN PAPI_OUTPUT_DIRECTORY=$d taskset -c "$P" "$BIN/bfs_papi" -f "$GRAPH" -n "$NTR" > /dev/null
   d=$RAW/papi_P_preset; rm -rf "$d"
   PAPI_EVENTS=$PRE PAPI_OUTPUT_DIRECTORY=$d taskset -c "$P" "$BIN/bfs_papi" -f "$GRAPH" -n "$NTR" > /dev/null || true
-  # (c) known-answer micro-benchmarks through PAPI
   [ -x "$BIN/microbench_papi" ] && {
     d=$RAW/papi_micro_alu; rm -rf "$d"
     PAPI_EVENTS="perf::PERF_COUNT_HW_INSTRUCTIONS,perf::PERF_COUNT_HW_CPU_CYCLES" PAPI_OUTPUT_DIRECTORY=$d \
@@ -258,7 +230,6 @@ papi() {
   mkdir -p "$OUT/papi"; cp -r "$RAW"/papi_* "$OUT/papi/" 2>/dev/null || true
 }
 
-# ---------------------------------------------------------------- 6 optimisations
 o1_compiler() {
   local v
   for v in O0 O1 O2 O3 native; do
@@ -269,9 +240,6 @@ o1_compiler() {
 
 o2_sched() {
   local s r
-  # BUStep sets bits of a shared bitmap non-atomically, so each thread's block
-  # must start on a 64-bit word: only chunk sizes that are multiples of 64 are
-  # safe. Record the unsafe ones as evidence, then sweep only the safe ones.
   : > "$OUT/sched_correctness.txt"
   for s in static "static,1000" "dynamic,100" guided "dynamic,64" "dynamic,1024"; do
     r=$(OMP_SCHEDULE=$s "$BIN/bfs_sched" -f "$GRAPH" -n 8 -v | grep -c 'Verification:.*PASS')
@@ -281,7 +249,6 @@ o2_sched() {
     OMP_SCHEDULE=$s CORESET=all "$RUN" "$BIN/bfs_sched" O2-sched
     OMP_SCHEDULE=$s PREFIX="taskset -c $P" CORESET=P "$RUN" "$BIN/bfs_sched" O2-sched
   done
-  # thread binding on the original code
   OMP_PROC_BIND=close OMP_PLACES=cores CORESET=all "$RUN" "$BIN/bfs_base" O2-bind-close
   OMP_PROC_BIND=spread OMP_PLACES=cores CORESET=all "$RUN" "$BIN/bfs_base" O2-bind-spread
   OMP_NUM_THREADS=$NPHYS OMP_PROC_BIND=close OMP_PLACES=cores CORESET=all "$RUN" "$BIN/bfs_base" O2-1-per-core
@@ -292,7 +259,6 @@ o3_hugepages() {
   local orig; orig=$(sed 's/.*\[\(.*\)\].*/\1/' /sys/kernel/mm/transparent_hugepage/enabled)
   local f="$OUT/thp_usage.txt"; : > "$f"
   if [ "$SET_SYS" != 1 ]; then
-    # no root: keep the system THP mode, compare base vs madvise patch only
     echo "system THP mode: $orig" >> "$f"
     CORESET=all "$RUN" "$BIN/bfs_thp" "O3-thp-$orig-base"
     PREFIX="" pstat "O3-thp-$orig-base" "$BIN/bfs_thp" "$G3"
@@ -328,7 +294,6 @@ o4_prefetch() {
   done
 }
 
-# ---------------------------------------------------------------- 7 extras
 o5_relabel() {
   CORESET=all "$RUN" "$BIN/bfs_relabel" O5-relabel
   PREFIX="" pstat O5-relabel "$BIN/bfs_relabel" "$G2 $G3"
@@ -338,11 +303,9 @@ alphabeta() {
   for a in 5 15 30; do for b in 9 18 36; do
     CORESET=all "$RUN" "$BIN/bfs_a${a}b${b}" "AB-a${a}b${b}"
   done; done
-  "$BIN/bfs_base" -f "$GRAPH" -n 1 -l > "$OUT/bfs_steps_log.txt"   # per-step direction + times
+  "$BIN/bfs_base" -f "$GRAPH" -n 1 -l > "$OUT/bfs_steps_log.txt"
 }
 big_graph() {
-  # kron22 (~0.5 GB CSR) everywhere; kron24 (~2 GB) only on large machines,
-  # to push the working set beyond a server's last-level cache
   local scales="22" s v
   [ "$NLOG" -ge 64 ] && scales="22 24"
   for s in $scales; do
@@ -356,8 +319,6 @@ big_graph() {
 }
 
 o6_first_touch() {
-  # NUMA without numactl: parallel first touch of the edge array (-DPAR_FIRST_TOUCH)
-  # vs the default single-threaded file read, unbound and with spread binding
   [ -x "$BIN/bfs_ft" ] || { echo "no bfs_ft"; return 1; }
   lscpu | grep -i numa > "$OUT/numa_lscpu.txt"
   local s G
@@ -371,7 +332,6 @@ o6_first_touch() {
 }
 
 numa() {
-  # multi-socket nodes only: first-touch default vs interleaved pages
   command -v numactl >/dev/null || { echo "no numactl"; return 0; }
   local nodes; nodes=$(numactl -H | awk '/^available:/{print $2}')
   numactl -H > "$OUT/numa.txt"
@@ -385,7 +345,6 @@ numa() {
   GRAPH=$ROOT/kron$s.sg PREFIX="numactl --interleave=all" CORESET=all "$RUN" "$BIN/bfs_base" "big$s-numa-interleave"
 }
 
-# ---------------------------------------------------------------- 8 package
 package() {
   rm -f "$RAW"/perf*.data*
   local tgz=$HOME/${MACHINE}_results_$(date +%H%M).tar.gz
@@ -401,7 +360,6 @@ package() {
   fi
 }
 
-# ---------------------------------------------------------------- run
 step setup setup
 step sysinfo sysinfo
 [ "${SKIP_BUILD:-0}" = 1 ] || step build build_all

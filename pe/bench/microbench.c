@@ -1,19 +1,3 @@
-// Micro-benchmarks with predictable answers, used to (a) validate the counter
-// tools (perf, PAPI, Instruments) and (b) measure timer resolution and memory
-// latency for the performance model. Single-threaded on purpose.
-//
-//   microbench res                 clock resolution + clock_gettime overhead
-//   microbench alu   N             N iterations of a dependent integer chain
-//   microbench chase SIZE_KB STEPS pointer chase over a random single cycle;
-//                                  prints ns per load (= latency)
-//   microbench read  SIZE_MB       sequential read of SIZE_MB, prints GB/s
-//
-// Known answers for counter validation (run each with N and 2N, subtract):
-//   alu:   instructions grow by exactly N * (instructions in the loop body)
-//   chase: with SIZE >> last-level cache, LLC misses and dTLB misses grow by
-//          ~1 per step (every load hits a new random line and page)
-// Build with -DUSE_PAPI -lpapi to wrap the measured part in a PAPI region "micro".
-
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
 #include <stdio.h>
@@ -68,7 +52,7 @@ __attribute__((noinline)) static int do_alu(long n) {
   REGION_BEGIN();
   for (long i = 0; i < n; i++) {
     x = x * 6364136223846793005ULL + 1442695040888963407ULL;
-    __asm__ volatile("" : "+r"(x));  // keep the chain, stop vectorisation
+    __asm__ volatile("" : "+r"(x));
   }
   REGION_END();
   double t1 = now();
@@ -86,14 +70,14 @@ __attribute__((noinline)) static int do_chase(long size_kb, long steps) {
   if (posix_memalign((void **)&a, 4096, n * sizeof(node))) { perror("alloc"); return 1; }
   size_t *perm = malloc(n * sizeof(size_t));
   for (size_t i = 0; i < n; i++) perm[i] = i;
-  for (size_t i = n - 1; i > 0; i--) {  // Sattolo: one cycle through all nodes
+  for (size_t i = n - 1; i > 0; i--) {
     size_t j = xorshift() % i;
     size_t t = perm[i]; perm[i] = perm[j]; perm[j] = t;
   }
   for (size_t i = 0; i < n; i++) a[i].next = &a[perm[i]];
   free(perm);
   node *p = &a[0];
-  for (size_t i = 0; i < n; i++) p = p->next;  // warm caches/TLB once
+  for (size_t i = 0; i < n; i++) p = p->next;
   double t0 = now();
   REGION_BEGIN();
   for (long i = 0; i < steps; i++) p = p->next;
@@ -105,8 +89,6 @@ __attribute__((noinline)) static int do_chase(long size_kb, long steps) {
   return 0;
 }
 
-// K independent pointer chases interleaved: time per load drops with K until
-// the core runs out of miss buffers -> measured memory-level parallelism.
 __attribute__((noinline)) static int do_mlp(long size_kb, long steps, int k) {
   size_t n = (size_t)size_kb * 1024 / sizeof(node);
   node *a;
@@ -120,7 +102,7 @@ __attribute__((noinline)) static int do_mlp(long size_kb, long steps, int k) {
   for (size_t i = 0; i < n; i++) a[i].next = &a[perm[i]];
   free(perm);
   node *p[64];
-  for (int c = 0; c < k; c++) p[c] = &a[(n / k) * c];   // k far-apart start points
+  for (int c = 0; c < k; c++) p[c] = &a[(n / k) * c];
   double t0 = now();
   for (long i = 0; i < steps; i++)
     for (int c = 0; c < k; c++) p[c] = p[c]->next;

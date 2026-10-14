@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Turns raw results into report tables and figures.
-
-    python3 pe/scripts/analyze.py [machine_dir ...]     # default: all of pe/results/*/
-
-Per machine directory it writes:
-    summary.csv / summary.md   median, IQR (ms/trial) and GTEPS per configuration
-    counters.csv / counters.md perf stat deltas (n=NTR minus n=0) per variant and event
-    papi_regions.csv           PAPI per-kernel counter sums (x86)
-    latency / stream / timer summaries in key_numbers.md
-and figures in pe/plots/<machine>/*.pdf
-"""
 import csv
 import glob
 import json
@@ -25,18 +14,15 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-WARM = 5          # trials 1..WARM of every process are warm-up and dropped
-NTR_FULL = 64     # trials used in perf stat runs (8 in QUICK mode)
+WARM = 5
+NTR_FULL = 64
 
 plt.rcParams.update({"figure.figsize": (6.4, 3.6), "axes.grid": True, "grid.alpha": 0.3,
                      "font.size": 9, "savefig.bbox": "tight"})
 
-
 def q(x, p):
     return float(np.percentile(x, p)) if len(x) else float("nan")
 
-
-# ------------------------------------------------------------------ timings
 def summarize(tim):
     keys = ["machine", "variant", "graph", "edges", "coreset", "threads", "bind", "places", "schedule"]
     t = tim[tim.trial > WARM]
@@ -51,11 +37,9 @@ def summarize(tim):
         rows.append(r)
     return pd.DataFrame(rows)
 
-
 def ref_median(s, variant="base", coreset="all"):
     m = s[(s.variant == variant) & (s.coreset == coreset)]
     return float(m.median_ms.iloc[0]) if len(m) else float("nan")
-
 
 def bar(s, title, fname, outdir, label=lambda r: r.variant, ref=None):
     if s.empty:
@@ -74,10 +58,8 @@ def bar(s, title, fname, outdir, label=lambda r: r.variant, ref=None):
     fig.savefig(os.path.join(outdir, fname))
     plt.close(fig)
 
-
 def plots_timings(tim, s, outdir):
     base = ref_median(s)
-    # warm-up inside one process
     w = tim[tim.variant == "base-warmup"]
     if not w.empty:
         fig, ax = plt.subplots()
@@ -88,10 +70,8 @@ def plots_timings(tim, s, outdir):
         ax.set_title("Per-trial time: warm-up and outliers")
         fig.savefig(os.path.join(outdir, "warmup.pdf"))
         plt.close(fig)
-    # core sets
     bar(s[s.variant == "base"], "Baseline by core set", "baseline_coresets.pdf", outdir,
         label=lambda r: f"{r.coreset} ({r.threads} thr)")
-    # scaling
     sc = s[s.variant.str.startswith("scaling")]
     if not sc.empty:
         fig, ax = plt.subplots()
@@ -122,8 +102,6 @@ def plots_timings(tim, s, outdir):
     bar(s[s.variant.str.startswith("big-")], "kron22 (4x larger graph)", "big_graph.pdf", outdir,
         label=lambda r: r.variant[4:], ref=ref_median(s, "big-base"))
 
-
-# ------------------------------------------------------------------ perf stat
 def read_perf_csv(path):
     vals = {}
     if not os.path.exists(path):
@@ -137,9 +115,8 @@ def read_perf_csv(path):
         try:
             vals[f[2]] = float(f[0])
         except ValueError:
-            vals[f[2]] = float("nan")       # <not supported> / <not counted>
+            vals[f[2]] = float("nan")
     return vals
-
 
 def counters(mdir, edges):
     files = glob.glob(os.path.join(mdir, "perf", "*__g*__n*.csv"))
@@ -163,7 +140,6 @@ def counters(mdir, edges):
     c = pd.DataFrame(rows)
     if c.empty:
         return c
-    # derived metrics per PMU (cpu_core / cpu_atom / plain)
     extra = []
     for v, g in c.groupby("variant"):
         e = dict(zip(g.event, g.delta))
@@ -181,8 +157,6 @@ def counters(mdir, edges):
                     extra.append(dict(variant=v, event=f"{pmu or 'all/'}{miss} ratio", delta=a / b))
     return pd.concat([c, pd.DataFrame(extra)], ignore_index=True)
 
-
-# ------------------------------------------------------------------ PAPI
 def papi_regions(mdir):
     rows = []
     for d in sorted(glob.glob(os.path.join(mdir, "papi", "papi_*"))):
@@ -206,15 +180,13 @@ def papi_regions(mdir):
         for jf in glob.glob(os.path.join(d, "**", "*.json"), recursive=True):
             try:
                 walk(json.load(open(jf)))
-            except Exception as ex:      # noqa: BLE001 - keep going on odd files
+            except Exception as ex:
                 print("  papi parse:", jf, ex)
         for region, evs in tot.items():
             for ev, val in evs.items():
                 rows.append(dict(run=os.path.basename(d), region=region, event=ev, value=val))
     return pd.DataFrame(rows)
 
-
-# ------------------------------------------------------------------ benchmarks
 def key_numbers(mdir, s, c, outdir):
     lines = [f"# Key numbers: {os.path.basename(mdir)}", "",
              f"Warm-up trials dropped per process: {WARM}", ""]
@@ -249,7 +221,6 @@ def key_numbers(mdir, s, c, outdir):
         p = os.path.join(mdir, f)
         if os.path.exists(p):
             lines += ["", f"## {f}", "```", open(p).read().strip(), "```"]
-    # timer cross-check
     tg = sorted(glob.glob(os.path.join(mdir, "timers_gapbs_*.txt")))
     if tg:
         lines += ["", "## Timer cross-check (one process, NTR trials)", "",
@@ -273,7 +244,6 @@ def key_numbers(mdir, s, c, outdir):
             else:
                 lines.append(f"| {r.variant} | {r.event} | {r.per_trial:.4g} | {r.per_edge:.4g} |")
     open(os.path.join(mdir, "key_numbers.md"), "w").write("\n".join(lines) + "\n")
-
 
 def main():
     dirs = sys.argv[1:] or sorted(d for d in glob.glob(os.path.join(ROOT, "pe", "results", "*")) if os.path.isdir(d))
@@ -302,7 +272,6 @@ def main():
             p.to_csv(os.path.join(mdir, "papi_regions.csv"), index=False)
         key_numbers(mdir, s, c, outdir)
         print(f"{name}: {len(s)} configurations, {len(c)} counter rows, {len(p)} PAPI rows -> {outdir}")
-
 
 if __name__ == "__main__":
     main()

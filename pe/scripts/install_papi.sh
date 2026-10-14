@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Builds PAPI from source into ~/opt/papi (no root needed). Run once on a
-# Hábrók login node (they have internet); takes ~5 minutes.
 set -e
 V=7.1.0
 PREFIX=$HOME/opt/papi

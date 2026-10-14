@@ -44,7 +44,6 @@ them in the parent array as negative numbers. Thus, the encoding of parent is:
 
 using namespace std;
 
-// -DPE_COUNT_EDGES: count edges examined per step (input for the traffic model)
 #ifdef PE_COUNT_EDGES
 static int64_t pe_td_edges = 0, pe_bu_edges = 0, pe_bu_vertices = 0;
 #define PE_COUNT(var, n) var += (n)
@@ -111,8 +110,6 @@ int64_t TDStep(const Graph &g, pvector<NodeID> &parent,
     for (auto q_iter = queue.begin(); q_iter < queue.end(); q_iter++) {
       NodeID u = *q_iter;
 #if PF_DIST > 0
-      // Issue the random parent[] loads PF_DIST neighbours ahead to raise the
-      // number of cache misses in flight (memory-level parallelism).
       NodeID *n_end = g.out_neigh(u).end();
       for (NodeID *it = g.out_neigh(u).begin(); it < n_end; it++) {
         if (n_end - it > PF_DIST)
@@ -331,8 +328,6 @@ int main(int argc, char* argv[]) {
   Builder b(cli);
   Graph g = b.MakeGraph();
 #ifdef RELABEL
-  // Degree-ordered relabelling: high-degree vertices get small, adjacent IDs,
-  // so their parent[] entries share cache lines and pages.
   g = Builder::RelabelByDegree(g);
 #endif
   SourcePicker<Graph> sp(g, cli.start_vertex());

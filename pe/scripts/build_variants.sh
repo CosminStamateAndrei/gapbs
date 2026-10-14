@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Builds every BFS variant of the study into pe/bin/, plus converter, microbench
-# and (if downloadable) STREAM. Also writes the GCC vectorisation reports.
-#   pe/scripts/build_variants.sh                 # Linux, g++/gcc
-#   CXX=g++-15 CC=gcc-15 pe/scripts/build_variants.sh   # macOS with Homebrew GCC
 set -u
 . "$(dirname "$0")/common.sh"
 cd "$ROOT"
@@ -13,7 +9,6 @@ BASE="-std=c++11 -Wall -g -fno-omit-frame-pointer -fopenmp"
 case "$(uname -m)" in x86_64) NATIVE="-march=native" ;; *) NATIVE="-mcpu=native" ;; esac
 FAIL=0
 
-# build NAME FLAGS...   (LIBS env var is appended after the source file)
 build() {
   local name=$1; shift
   printf '  %-14s %s %s\n' "$name" "$*" "${LIBS:-}"
@@ -50,24 +45,19 @@ if [ "$OS" = Linux ]; then
   fi
 fi
 
-# Vectorisation reports (GCC only), filtered to the BFS source
 for v in O3 native; do
   flags="-O3"; [ $v = native ] && flags="-O3 $NATIVE"
   $CXX $BASE $flags -fopt-info-vec-all src/bfs.cc -o /dev/null 2> "$OUT/vec_report_${v}_full.txt"
   grep 'bfs.cc' "$OUT/vec_report_${v}_full.txt" > "$OUT/vec_report_${v}_bfs.txt" || true
 done
 
-# converter (same flags as base)
 $CXX $BASE -O3 src/converter.cc -o "$ROOT/converter" || FAIL=1
 
-# micro-benchmarks
 $CC -O2 -g -o "$BIN/microbench" pe/bench/microbench.c || FAIL=1
 if [ "${HAVE_PAPI:-0}" = 1 ]; then
   $CC -O2 -g -DUSE_PAPI -o "$BIN/microbench_papi" pe/bench/microbench.c -lpapi || FAIL=1
 fi
 
-# STREAM (McCalpin). Downloaded at build time; arrays of 40M doubles = 320 MB
-# each, far above 4x any laptop last-level cache.
 if [ ! -f pe/bench/stream.c ]; then
   curl -fsSL -o pe/bench/stream.c https://www.cs.virginia.edu/stream/FTP/Code/stream.c \
     || echo "  !! could not download stream.c"

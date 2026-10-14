@@ -287,9 +287,6 @@ class Reader {
     neighs = new DestID_[num_edges];
     HugeAdvise(neighs, num_edges * sizeof(DestID_));
 #ifdef PAR_FIRST_TOUCH
-    // NUMA: file.read below would touch every page from one thread, placing the
-    // whole edge array on one socket. Touch it in parallel first so the pages
-    // are spread over all NUMA nodes and their memory controllers.
     #pragma omp parallel for schedule(static)
     for (SGOffset i = 0; i < num_edges; i++)
       neighs[i] = 0;

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Compact two-machine figures for the report -> report/figures/*.pdf"""
 import os
 
 import matplotlib
@@ -17,10 +16,8 @@ COL = {"wsl": "#1f77b4", "habrok": "#d62728"}
 plt.rcParams.update({"font.size": 8, "axes.grid": True, "grid.alpha": 0.3, "savefig.bbox": "tight",
                      "figure.figsize": (3.4, 2.3), "legend.fontsize": 7})
 
-
 def summ(m):
     return pd.read_csv(os.path.join(RES, m, "summary.csv"))
-
 
 def latency():
     fig, ax = plt.subplots()
@@ -34,7 +31,6 @@ def latency():
     ax.set_ylabel("ns per dependent load")
     ax.legend()
     fig.savefig(os.path.join(FIG, "latency.pdf"))
-
 
 def scaling():
     fig, axes = plt.subplots(1, 2, figsize=(7, 2.4))
@@ -52,7 +48,6 @@ def scaling():
         ax.legend()
     fig.tight_layout()
     fig.savefig(os.path.join(FIG, "scaling.pdf"))
-
 
 def optimisations():
     rows = [("O1 -O2", "O1-O2", None), ("O1 -O3 -march=native", "O1-native", None),
@@ -83,7 +78,6 @@ def optimisations():
     ax.legend()
     fig.savefig(os.path.join(FIG, "optimisations.pdf"))
 
-
 def warmup():
     fig, ax = plt.subplots()
     for m in M:
@@ -96,7 +90,6 @@ def warmup():
     ax.set_xlabel("trial index within one process")
     ax.set_ylabel("ms")
     fig.savefig(os.path.join(FIG, "warmup.pdf"))
-
 
 def big_graphs():
     s = summ("habrok")
@@ -114,12 +107,11 @@ def big_graphs():
     ax.set_xlabel("")
     ax.figure.savefig(os.path.join(FIG, "big_graphs.pdf"))
 
-
 for f in (latency, scaling, optimisations, warmup, big_graphs):
     try:
         f()
         print("ok", f.__name__)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print("FAILED", f.__name__, e)
 mp = os.path.join(ROOT, "pe", "plots", "model", "model_vs_measured.pdf")
 if os.path.exists(mp):

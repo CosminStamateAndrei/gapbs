@@ -1,6 +1,3 @@
-# Shared helpers for the pe/ scripts. Source it; works with bash 3.2 (macOS) and bash 5.
-# Sets: ROOT, MACHINE, OUT (results dir), RAW (raw logs), BIN, GRAPH, OS
-
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 OS=$(uname -s)
 if [ -z "${MACHINE:-}" ]; then
@@ -14,29 +11,23 @@ mkdir -p "$OUT" "$RAW" "$BIN"
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT/batch.log"; }
 
-# Number of logical CPUs this process may use (respects Slurm/cgroup affinity)
 ncpu() { if command -v nproc >/dev/null 2>&1; then nproc; else sysctl -n hw.ncpu; fi; }
 
-# "0-3,8,10-11" -> 7
 cpulist_count() {
   echo "$1" | tr ',' '\n' | awk -F- 'NF==2{n+=$2-$1+1; next} NF==1&&$1!=""{n++} END{print n+0}'
 }
 
-# P-core / E-core CPU lists on Intel hybrid (empty when not available)
 pcores() { cat /sys/devices/cpu_core/cpus 2>/dev/null || true; }
 ecores() { cat /sys/devices/cpu_atom/cpus 2>/dev/null || true; }
 
-# Physical core count (Linux: lscpu; macOS: sysctl)
 nphys() {
   if [ "$OS" = Darwin ]; then sysctl -n hw.physicalcpu
   else lscpu -p=CORE 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d ' '; fi
 }
 
 FAILED_STEPS=""
-# step NAME command...  -> runs, logs, never aborts the batch
 step() {
   local name=$1; shift
-  # ONLY="a b c" runs just those steps (used for partial re-runs)
   if [ -n "${ONLY:-}" ] && ! echo " $ONLY " | grep -q " $name "; then return 0; fi
   log "=== START $name"
   local t0; t0=$(date +%s)

@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""Bandwidth / latency model for direction-optimising BFS (GAPBS bfs).
-
-    python3 pe/scripts/model.py [machine ...]       # default: wsl habrok
-
-Inputs (all measured, see pe/results/):
-  common/edge_counts.txt   edges and vertices examined per trial (-DPE_COUNT_EDGES),
-                           number of TD/BU steps per trial (-l log)
-  <m>/stream_*.txt         sustainable bandwidth (STREAM triad), 1 thread and all
-  <m>/latency.csv          dependent-load latency at 1 GB working set
-  <m>/mlp.csv              memory-level parallelism per core (optional)
-  <m>/summary.csv          measured ms per trial (scaling-bound series)
-
-Model (per BFS trial, graph with n vertices):
-  bytes  = InitParent 12n + per BU step (12n + n/8) + 64 B per vertex checked in BU
-           + 68 B per edge examined in TD (4 B neighbour id + one 64 B line for the
-           random parent[v] access) + conversions 2*n/8 + final pass 8n
-  N_rand = vertices checked in BU + edges examined in TD (one random line each)
-  T_bw(p)  = bytes / min(p * B_1T, B_all)
-  T_lat(p) = N_rand * L_dram / (MLP * p)
-  T_model(p) = max(T_bw, T_lat)   (lower bound; ignores synchronisation)
-"""
 import os
 import re
 import sys
@@ -34,7 +13,6 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RES = os.path.join(ROOT, "pe", "results")
 MLP_DEFAULT = 10.0
 
-
 def edge_counts(graph="kron20", binary="bfs_count"):
     txt = open(os.path.join(RES, "common", "edge_counts.txt")).read()
     sec = re.search(rf"## {graph} {binary}\n(.*?)(?=\n## |\Z)", txt, re.S).group(1)
@@ -45,7 +23,6 @@ def edge_counts(graph="kron20", binary="bfs_count"):
     steps = {k: len(re.findall(rf"^\s+{k}\s", sec, re.M)) / trials for k in ("td", "bu", "e", "c")}
     td, bu_e, bu_v = (np.mean([e[i] for e in ec]) for i in range(3))
     return dict(n=n, m=m, trials=trials, td_edges=td, bu_edges=bu_e, bu_vertices=bu_v, **steps)
-
 
 def traffic(c):
     n = c["n"]
@@ -59,16 +36,14 @@ def traffic(c):
     }
     return parts, sum(parts.values()), c["bu_vertices"] + c["td_edges"]
 
-
 def stream_triad(mdir, tag):
     f = os.path.join(mdir, f"stream_{tag}.txt")
     if not os.path.exists(f):
         return float("nan")
     for line in open(f):
         if line.startswith("Triad:"):
-            return float(line.split()[1]) * 1e6       # MB/s -> B/s
+            return float(line.split()[1]) * 1e6
     return float("nan")
-
 
 def machine_params(mdir):
     lat = pd.read_csv(os.path.join(mdir, "latency.csv"))
@@ -82,7 +57,6 @@ def machine_params(mdir):
         mlp_src = "measured"
     return dict(B1=stream_triad(mdir, "1T"), Ball=stream_triad(mdir, "all"),
                 L=l_dram, MLP=mlp, mlp_src=mlp_src)
-
 
 def main():
     machines = sys.argv[1:] or ["wsl", "habrok"]
@@ -126,7 +100,6 @@ def main():
     fig.savefig(os.path.join(ROOT, "pe", "plots", "model", "model_vs_measured.pdf"), bbox_inches="tight")
     open(os.path.join(RES, "common", "model.md"), "w").write("\n".join(out) + "\n")
     print("\n".join(out))
-
 
 if __name__ == "__main__":
     main()

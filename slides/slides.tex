@@ -1,5 +1,3 @@
-% Group 1 - GAPBS BFS - presentation (20 min + 5 min Q&A), 20/22 October 2026
-% Build: pdflatex slides.tex (twice). Figures come from ../report/figures.
 \documentclass[aspectratio=169,11pt]{beamer}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -9,7 +7,6 @@
 \graphicspath{{../report/figures/}{rug/}}
 \sisetup{group-separator={,}}
 
-% ---------------------------------------------------------------- RUG-style theme
 \definecolor{rugred}{RGB}{204,0,0}
 \definecolor{rugdark}{RGB}{88,0,0}
 \definecolor{ruggray}{RGB}{60,60,60}
@@ -39,7 +36,6 @@
 
 \begin{document}
 
-% ---------------------------------------------------------------- title
 {\usebackgroundtemplate{\includegraphics[width=\paperwidth,height=\paperheight]{title_background}}
 \setbeamertemplate{headline}{}\setbeamertemplate{footline}{}
 \begin{frame}[plain]
@@ -56,7 +52,6 @@
   {\color{white}\small Bernoulli Institute \hfill 2026-10-20\par}
 \end{frame}}
 
-% ---------------------------------------------------------------- overview
 \begin{frame}{Overview}
   \vspace*{0.4cm}
   \begin{enumerate}\setlength{\itemsep}{6pt}\large
@@ -69,7 +64,6 @@
   \end{enumerate}
 \end{frame}
 
-% ---------------------------------------------------------------- application
 \begin{frame}{Application: direction-optimising BFS}
   \begin{columns}[T]
     \begin{column}{0.52\textwidth}
@@ -110,7 +104,6 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- systems
 \begin{frame}{Systems}
   \footnotesize
   \begin{tabular}{@{}p{3.6cm}p{5.2cm}p{5.2cm}@{}}
@@ -133,7 +126,6 @@
   \end{itemize}
 \end{frame}
 
-% ---------------------------------------------------------------- method
 \begin{frame}{Measurement method}
   \begin{columns}[c]
     \begin{column}{0.5\textwidth}
@@ -151,7 +143,6 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- tool validation
 \begin{frame}{Do the tools measure what we think?}
   \small
   \begin{tabular}{@{}lll@{}}
@@ -170,7 +161,6 @@
   \end{tabular}
 \end{frame}
 
-% ---------------------------------------------------------------- data race
 \begin{frame}{Verification found a hidden data race}
   \begin{columns}[c]
     \begin{column}{0.55\textwidth}
@@ -199,7 +189,6 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- hotspots
 \begin{frame}{Where does the time go?}
   \begin{columns}[T]
     \begin{column}{0.47\textwidth}
@@ -235,7 +224,6 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- scaling
 \begin{frame}{Thread scaling}
   \centering\fig[width=0.92\linewidth]{scaling}
   \begin{itemize}\small
@@ -245,7 +233,6 @@
   \end{itemize}
 \end{frame}
 
-% ---------------------------------------------------------------- model
 \begin{frame}{Model: bytes and random accesses, not FLOPs}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
@@ -301,7 +288,6 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- optimisations
 \begin{frame}{Seven optimisations, judged by IQR}
   \centering\fig[width=0.8\linewidth]{optimisations}\\[-2pt]
   \small
@@ -376,7 +362,6 @@
     The analysis and the model predicted these outcomes \emph{before} we implemented them.}}
 \end{frame}
 
-% ---------------------------------------------------------------- conclusion
 \begin{frame}{Conclusions}
   \begin{itemize}\setlength{\itemsep}{6pt}
     \item BFS is about \textbf{memory and synchronisation}, not arithmetic: IPC $\approx$ 1,
@@ -393,7 +378,6 @@
   {\footnotesize\color{ruglight} Code, scripts, raw data: \texttt{github.com/CosminStamateAndrei/gapbs} (\texttt{pe/})}
 \end{frame}
 
-% ---------------------------------------------------------------- questions
 {\setbeamertemplate{headline}{}
 \begin{frame}
   \vspace*{0.6cm}
