@@ -30,7 +30,8 @@ top-down, every examined edge costs 4 bytes of neighbour ID plus one random line
 bitmaps are sequential. MLP was measured with up to 32 interleaved pointer chases on one
 core. On the laptop the time per load falls from \SI{262}{ns} with one chain to
 \SI{17}{ns} with 16 chains, giving MLP $= 15.7$. This matches the 16 fill buffers of a Golden
-Cove core. For Hábrók we currently assume MLP $= 10$ \todo{replace by measured value}.
+Cove core. On Hábrók the time per load falls from \SI{101}{ns} to \SI{4.65}{ns} with 32
+chains, giving MLP $= 21.7$.
 
 \begin{table}[ht]
 \centering\small
@@ -64,9 +65,9 @@ Machine & $p$ & $T_\text{bw}$ [ms] & $T_\text{lat}$ [ms] & $T_\text{model}$ [ms]
 \midrule
 Laptop & 1 & 14.6 & 46.7 & 46.7 & 56.5 & 1.21 \\
 Laptop & 8 & 11.3 & 5.8 & 11.3 & 8.4 & 0.74 \\
-Hábrók & 1 & 5.2 & 19.2 & 19.2 & 24.9 & 1.30 \\
-Hábrók & 48 & 0.55 & 0.40 & 0.55 & 1.38 & 2.52 \\
-Hábrók & 128 & 0.55 & 0.15 & 0.55 & 3.53 & 6.46 \\
+Hábrók & 1 & 5.2 & 8.9 & 8.9 & 24.9 & 2.81 \\
+Hábrók & 48 & 0.55 & 0.18 & 0.55 & 1.38 & 2.52 \\
+Hábrók & 128 & 0.55 & 0.07 & 0.55 & 3.53 & 6.46 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -81,10 +82,16 @@ the model.}
 
 Three regimes emerge:
 \begin{enumerate}
-  \item \textbf{Single thread: latency-bound on both machines.} The latency bound predicts
-        \SI{46.7}{ms} and \SI{19.2}{ms}; we measure 21\% and 30\% more. A single core cannot
-        keep enough misses in flight to use the bandwidth: $T_\text{lat}$ is
-        3--4$\times$ larger than $T_\text{bw}$.
+  \item \textbf{Single thread: latency-bound.} On both machines $T_\text{lat} > T_\text{bw}$:
+        one core cannot keep enough misses in flight to use the bandwidth. On the laptop the
+        measured time is within \SI{21}{\percent} of the latency bound. On Hábrók it is
+        2.8$\times$ the bound. The BFS sustains only $\approx$7.7 outstanding misses
+        ($N_\text{rand} L_\text{DRAM} / T$) out of the 21.7 the core supports. Each checked
+        vertex is a chain of dependent loads (\texttt{parent[u]} $\rightarrow$ index
+        $\rightarrow$ neighbour $\rightarrow$ bitmap word), so the out-of-order window
+        exposes only a few vertices at a time. The laptop's much higher latency hides this
+        limit better. Including the achievable rather than the peak MLP is the main
+        refinement this model would need.
   \item \textbf{Laptop, all threads: bandwidth-bound.} With 8 threads the latency bound drops
         below the bandwidth bound of \SI{11.3}{ms}. The measured \SI{8.4}{ms} is even
         \SI{26}{\percent} faster than this bound. Moving all \SI{179}{MB} from DRAM in

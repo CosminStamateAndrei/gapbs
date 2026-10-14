@@ -45,4 +45,6 @@ module, and \texttt{perf\_event\_paranoid} is 2 (user-space counting only). We t
 PAPI~7.1 from source in our home directory. We also wrote \texttt{pecount}
 (\texttt{pe/bench/pecount.c}, 200 lines), which counts a command's events through
 \texttt{perf\_event\_open} like \texttt{perf stat}. All Hábrók runs used one exclusive node
-through Slurm.
+through Slurm. Even so, our counters were scheduled only \SIrange{14}{26}{\percent} of the
+time when several were open, which indicates that other software on the node also uses the
+counter hardware. We therefore rely on PAPI regions with few events for quantitative counts.

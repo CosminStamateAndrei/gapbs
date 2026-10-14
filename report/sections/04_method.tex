@@ -47,8 +47,11 @@ CPU time, 2 tools & perf task-clock \SI{6.00}{s}; \texttt{time} user+sys \SI{6.0
 pecount vs.\ perf & page faults \num{36422} vs.\ \num{36423} & pecount reproduces perf \\
 gprof & \SI{100}{\percent} of samples attributed to \texttt{frame\_dummy} & \textbf{unusable} for OpenMP (samples only the main thread; outlined regions unresolved) \\
 perf sampling & BUStep, InitParent, TDStep resolved; libgomp unresolved but attributed by DSO & reliable \\
-PAPI vs.\ pecount (Hábrók) & \todo{same events, 1 thread: PAPI region sum vs.\ pecount delta} & \\
-Known answers (Hábrók) & \todo{alu: instr./iteration = loop length; chase: $\approx$1 LLC/TLB miss per step} & \\
+PAPI vs.\ pecount (Hábrók, 1 thread, 64 searches) & sum of the 5 PAPI kernel regions / pecount whole-BFS delta: cache misses \SI{99.1}{\percent}, references \SI{97.2}{\percent}, cycles \SI{95.0}{\percent}, instructions \SI{90.3}{\percent} & agree; remainder = code outside the regions (final pass, serial bitmap resets) \\
+Known answer: ALU chain (PAPI) & \num{5.000} instructions and \num{4.000} cycles per iteration & = 5-instruction loop; critical path \texttt{imul} (3) + \texttt{add} (1) \\
+Known answer: pointer chase \SI{1}{GB} (PAPI) & \num{1.0007} cache misses per step & 1 miss per random load, as expected \\
+Known answers via pecount & ALU \num{4.99} instr./iteration; chase \num{2.4} misses/step & counters were multiplexed (running \SIrange{14}{26}{\percent} of the time); scaling is wrong across phases $\Rightarrow$ use PAPI regions \\
+Timers on Hábrók & \texttt{/usr/bin/time} not installed & cross-check only on laptop \\
 \bottomrule
 \end{tabular}
 \end{table}

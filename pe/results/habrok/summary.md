@@ -69,3 +69,15 @@
 | big24-huge | all | 128 | default | 95 | 37.590 | 5.150 | 6.927 |
 | big24-pf8 | all | 128 | default | 95 | 37.050 | 5.055 | 7.028 |
 | big24-relabel | all | 128 | default | 95 | 33.710 | 17.285 | 7.724 |
+| O6-k20-base | all | 128 | default | 95 | 2.830 | 1.375 | 5.548 |
+| O6-k20-firsttouch | all | 128 | default | 95 | 2.690 | 1.425 | 5.836 |
+| O6-k20-base | all | 128 | default | 95 | 4.000 | 1.170 | 3.925 |
+| O6-k20-firsttouch | all | 128 | default | 95 | 1.940 | 1.180 | 8.093 |
+| O6-k22-base | all | 128 | default | 95 | 12.650 | 1.640 | 5.072 |
+| O6-k22-firsttouch | all | 128 | default | 95 | 11.290 | 1.310 | 5.683 |
+| O6-k22-base | all | 128 | default | 95 | 12.330 | 1.205 | 5.203 |
+| O6-k22-firsttouch | all | 128 | default | 95 | 10.960 | 1.345 | 5.854 |
+| O6-k24-base | all | 128 | default | 95 | 37.330 | 5.430 | 6.975 |
+| O6-k24-firsttouch | all | 128 | default | 95 | 38.310 | 4.245 | 6.797 |
+| O6-k24-base | all | 128 | default | 95 | 35.340 | 4.525 | 7.368 |
+| O6-k24-firsttouch | all | 128 | default | 95 | 35.470 | 4.475 | 7.341 |

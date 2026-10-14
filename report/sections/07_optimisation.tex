@@ -16,7 +16,7 @@ ratio of medians).}
 \end{figure}
 
 \begin{table}[ht]
-\centering\small
+\centering\footnotesize
 \caption{Median [IQR] in ms per search. Baseline: \texttt{-O3}, default schedule and threads.
 Bold: significant improvement.}
 \label{tab:opt}
@@ -34,7 +34,8 @@ O4 prefetch $d{=}16$ & kron20 & 8.15 [3.70] & 2.55 [1.57] \\
 O5 degree relabelling & kron20 & \textbf{3.53 [1.77]} & 2.64 [3.13] \\
 O5 degree relabelling & kron22 & \textbf{25.1 [12.8]} vs.\ 71.1 & \textbf{6.67 [1.35]} vs.\ 12.14 [1.66] \\
 O5 degree relabelling & kron24 & -- & 33.7 [17.3] vs.\ 38.2 [5.7] \\
-O6 parallel first touch (NUMA) & kron22/24 & -- & \todo{pending} \\
+O6 base vs.\ first touch, spread binding & kron20 & -- & 4.00 [1.17] vs.\ \textbf{1.94 [1.18]} \\
+O6 base vs.\ first touch, spread binding & kron22 & -- & 12.33 [1.21] vs.\ \textbf{10.96 [1.35]} \\
 O7 $\alpha{=}15,\beta{=}9$ / $\alpha{=}5,\beta{=}9$ & kron20 & 8.17 / 37.8 & 2.42 [1.34] / 2.76 \\
 \bottomrule
 \end{tabular}
@@ -75,7 +76,9 @@ we confirmed with \texttt{/proc/self/smaps\_rollup} that \SI{127}{MB} of the pro
 laptop configurations lie within each other's IQR. On \texttt{kron22} the patch reduces the
 laptop median by \SI{29}{\percent}, but with IQRs above \SI{40}{ms} this is not significant.
 Hábrók already runs with THP \texttt{always}, so the baseline uses huge pages and the patch
-changes nothing. \todo{dTLB misses per search from pecount, base vs.\ patch.}
+changes nothing: \num{4200} vs.\ \num{4900} dTLB misses per search, both negligible against
+about 2 million random accesses. On the laptop, where TLB misses inflate DRAM latency
+(Figure~\ref{fig:latency}), the expected benefit is masked by WSL2's variance.
 
 \subsection{O4: Software prefetching in top-down}
 \emph{Rationale.} \texttt{TDStep}'s random \texttt{parent[v]} accesses are latency-bound, and
@@ -115,8 +118,15 @@ pages and prefetching do not matter on this node.}
 thread, so on Hábrók the whole \SI{125}{MB} edge array lands on one socket. The second
 socket's threads then read everything remotely, and only one socket's memory controllers are
 used. \texttt{numactl} is not available, so \emph{change}: \texttt{-DPAR\_FIRST\_TOUCH}
-zeroes the array in parallel before reading. \emph{Result.} \todo{O6-k20/22/24 base vs.\
-firsttouch, unbound and spread.}
+zeroes the array in parallel before reading. \emph{Result.} Placement matters as soon as
+threads are spread over both sockets. With \texttt{OMP\_PROC\_BIND=spread}, the baseline
+slows to \SI{4.00}{ms} [IQR 1.17] on \texttt{kron20}, because half of the threads read
+everything remotely. With parallel first touch it takes \textbf{\SI{1.94}{ms} [1.18], a
+2.1$\times$ improvement}, and 1.5$\times$ faster than the default configuration. On
+\texttt{kron22} first touch gains \SI{11}{\percent} with spread binding (\SI{12.33}{} $\to$
+\SI{10.96}{ms}, significant). Unbound, the gains are smaller and within the IQR, because the
+OS places threads unpredictably. On \texttt{kron24} the difference is not significant; we have
+not yet determined why the effect disappears for the largest graph.
 
 \subsection{O7: Direction-switch thresholds}
 \emph{Rationale.} $\alpha$ and $\beta$ decide how much work runs in the two very different

@@ -32,9 +32,10 @@ Kronecker graph with $2^{20}$ vertices. A traffic model built from these counts,
 bandwidth and measured latency and memory-level parallelism predicts single-thread
 performance within \SIrange{21}{30}{\percent}. It shows that the laptop is bandwidth-bound,
 while the server node is limited by synchronisation and cross-socket effects. Of seven
-optimisation strategies, two gave significant gains: degree-ordered relabelling (up to
-$2.8\times$, also cutting the edges examined by up to \SI{48}{\percent}) and choosing the
-thread count and placement ($2.1\times$ on the server). As the model predicts, compiler
+optimisation strategies, three gave significant gains: degree-ordered relabelling (up to
+$2.8\times$, also cutting the edges examined by up to \SI{48}{\percent}), choosing the thread
+count and placement ($2.1\times$ on the server), and NUMA-aware first touch of the graph
+($2.1\times$ with threads spread over both sockets). As the analysis predicts, compiler
 flags, schedules, huge pages and prefetching stayed within run-to-run noise.
 \end{abstract}
 

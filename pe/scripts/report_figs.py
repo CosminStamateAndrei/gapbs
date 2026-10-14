@@ -59,7 +59,8 @@ def optimisations():
             ("O2 sched dynamic,256", "O2-sched", "dynamic;256"), ("O2 sched static,64", "O2-sched", "static;64"),
             ("O2 bind close", "O2-bind-close", None),
             ("O3 huge pages (madvise)", {"wsl": "O3-thp-madvise-huge", "habrok": "O3-thp-always-huge"}, None),
-            ("O4 prefetch d=16", "O4-pf16", None), ("O5 degree relabel", "O5-relabel", None)]
+            ("O4 prefetch d=16", "O4-pf16", None), ("O5 degree relabel", "O5-relabel", None),
+            ("O6 first touch + spread", {"wsl": "-", "habrok": "O6-k20-firsttouch"}, "spread")]
     fig, ax = plt.subplots(figsize=(7, 2.6))
     w = 0.38
     for j, m in enumerate(M):
@@ -69,7 +70,9 @@ def optimisations():
         for _, v, sch in rows:
             vv = v[m] if isinstance(v, dict) else v
             q = s[(s.variant == vv) & (s.coreset == "all")]
-            if sch:
+            if sch == "spread":
+                q = q[q.bind == "spread"]
+            elif sch:
                 q = q[q.schedule == sch]
             sp.append(base / q.median_ms.iloc[0] if len(q) else np.nan)
         ax.bar(np.arange(len(rows)) + (j - 0.5) * w, sp, w, color=COL[m], label=M[m])

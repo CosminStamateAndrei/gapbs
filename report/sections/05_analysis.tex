@@ -39,9 +39,37 @@ this is the cache miss on the start of each neighbour list. A further \SI{11}{\p
 on the bitmap bit-test, and about \SI{13}{\percent} on loads of the CSR index. The kernel is
 dominated by memory accesses, not arithmetic.
 
-\paragraph{Hardware counters (Hábrók).} \todo{Per-kernel PAPI table (InitParent, TDStep,
-BUStep, conversions): share of cycles, IPC, L2/L3 misses per examined edge; whole-run
-pecount: IPC, LLC and dTLB misses per search, for 1 thread and 128 threads.}
+\paragraph{Hardware counters per kernel (Hábrók).} PAPI regions give the per-kernel
+counters that sampling on the laptop cannot (Table~\ref{tab:papi}, one thread, so every
+region is fully counted).
+\begin{table}[ht]
+\centering\small
+\caption{PAPI per kernel, Hábrók, 1 thread, \texttt{kron20}, per search (64 searches).
+Misses: generic \texttt{PERF\_COUNT\_HW\_CACHE\_MISSES}.}
+\label{tab:papi}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Kernel & Cycles [M] & Share & IPC & Cache misses [k] & Misses per unit of work \\
+\midrule
+\texttt{BUStep} & 64.0 & \SI{77.7}{\percent} & 0.77 & 532 & 0.32 per vertex checked \\
+\texttt{InitParent} & 11.6 & \SI{14.0}{\percent} & 0.89 & 3.7 & --- \\
+\texttt{TDStep} & 3.6 & \SI{4.4}{\percent} & 1.01 & 216 & 0.75 per edge examined \\
+\texttt{BitmapToQueue} & 2.4 & \SI{2.9}{\percent} & 4.80 & 0.2 & --- \\
+\texttt{QueueToBitmap} & 0.8 & \SI{0.9}{\percent} & 1.59 & 2.5 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+\texttt{BUStep} takes \SI{78}{\percent} of the cycles even without any synchronisation, and
+both steps run at an IPC around 1 on a core that can sustain several instructions per
+cycle. In
+\texttt{TDStep}, \SI{75}{\percent} of the examined edges miss, as expected for random
+\texttt{parent[v]} accesses. In \texttt{BUStep} only a third of the checked vertices miss:
+consecutive vertices' neighbour lists are adjacent in the CSR array, so the hardware
+prefetcher hides many of them. The conversion kernels are streaming bit operations with high
+IPC and negligible cost. The data TLB is not a factor on Hábrók: with transparent huge pages
+always on, a search causes about 4,200 dTLB misses against roughly 2 million random line
+accesses. Counter runs with 128 threads include the five slow warm-up trials, which dominate
+their wall time, so we do not use them quantitatively.
 
 \paragraph{Thread scaling.} Figure~\ref{fig:scaling} shows the time per search as a function
 of the number of threads. On the laptop the best time is reached at 8 threads
