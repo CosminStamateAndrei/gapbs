@@ -46,3 +46,6 @@
 [10:53:56] === OK    numa (1 s)
 [10:53:56] === START package
 [10:53:56] results archived to /home5/s5524032/habrok_results_1053.tar.gz
+[10:53:56] GH_TOKEN not set: push manually or upload /home5/s5524032/habrok_results_1053.tar.gz
+[10:53:56] === OK    package (0 s)
+[10:53:56] batch_all done. Failed steps: setup timers counters_base profile papi o1_compiler o4_prefetch o5_relabel big_graph
