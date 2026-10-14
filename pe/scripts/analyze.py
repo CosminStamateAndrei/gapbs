@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-WARM = 4          # trials 1..WARM of every process are warm-up and dropped
+WARM = 5          # trials 1..WARM of every process are warm-up and dropped
 NTR_FULL = 64     # trials used in perf stat runs (8 in QUICK mode)
 
 plt.rcParams.update({"figure.figsize": (6.4, 3.6), "axes.grid": True, "grid.alpha": 0.3,
@@ -126,6 +126,8 @@ def plots_timings(tim, s, outdir):
 # ------------------------------------------------------------------ perf stat
 def read_perf_csv(path):
     vals = {}
+    if not os.path.exists(path):
+        return vals
     for line in open(path):
         if not line.strip() or line.startswith("#"):
             continue
@@ -257,7 +259,8 @@ def key_numbers(mdir, s, c, outdir):
             trials = sum(float(x) for x in re.findall(r"Trial Time:\s+([\d.]+)", txt))
             read = sum(float(x) for x in re.findall(r"Read Time:\s+([\d.]+)", txt))
             pv = read_perf_csv(os.path.join(mdir, f"timers_perf_{i}.csv"))
-            tt = open(os.path.join(mdir, f"timers_time_{i}.txt")).read().split()
+            tf = os.path.join(mdir, f"timers_time_{i}.txt")
+            tt = open(tf).read().split() if os.path.exists(tf) else []
             lines.append(f"| {i} | {read+trials:.3f} | {pv.get('duration_time', float('nan'))/1e9:.3f} | "
                          f"{pv.get('task-clock', float('nan'))/1e9:.3f} | {tt[0] if tt else 'n/a'} |")
     if c is not None and not c.empty:

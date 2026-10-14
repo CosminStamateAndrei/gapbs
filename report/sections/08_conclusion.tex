@@ -1,0 +1,29 @@
+% Owners: both
+\section{Discussion and conclusion}
+\label{sec:conclusion}
+
+\paragraph{What limits BFS.} Combining profiles, edge counts and the model gives a
+consistent picture. A single core is latency-bound: it cannot keep enough misses in flight.
+A laptop with all cores is bandwidth-bound and already beyond its DRAM bound thanks to L3
+reuse. A 128-core server is bound by neither: synchronisation at about ten barriers per
+search and cross-socket effects dominate. The optimisations confirm this. Those that reduce
+memory traffic or work (relabelling) or synchronisation span (fewer, socket-local threads)
+were significant. Those that target instruction count (compiler flags, vectorisation) or a
+minor kernel (prefetching in top-down) were not. This matches the course's message: the
+justification from analysis and model predicted which strategies could pay off before they
+were implemented.
+
+\paragraph{Threats to validity.}
+(i)~The laptop ran under WSL2: no hardware counters, a hidden hybrid topology and high
+variance (IQR up to \SI{56}{\percent}). We therefore use medians and treat differences within
+the IQR as insignificant. (ii)~The model assumes every byte comes from DRAM; this is why the
+laptop beats its bound. A cache-aware refinement would use the L3 bandwidth for the
+\SI{4}{MB} \texttt{parent} array. (iii)~MLP on Hábrók is assumed \todo{measured}.
+(iv)~Relabelling changes the source vertices. (v)~\texttt{kron20} is small for a 128-core
+node. Results on \texttt{kron22}/\texttt{kron24} show the expected higher GTEPS with
+growing work per barrier (\SI{6.8}{GTEPS} on \texttt{kron24}).
+
+\paragraph{Future work.} Hardware counters on the laptop through a native Linux boot; the
+Apple Silicon comparison planned in our work plan; a NUMA-aware partitioning of the bottom-up
+sweep; and fusing the short parallel regions of a BFS level to remove barriers. The latter
+addresses the dominant cost we identified.

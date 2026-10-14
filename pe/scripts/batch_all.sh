@@ -215,6 +215,15 @@ latency() {
   done
 }
 
+mlp() {
+  # memory-level parallelism: K interleaved chases over 1 GB, one core
+  local f="$OUT/mlp.csv" k
+  echo "chains,ns_per_load" > "$f"
+  for k in 1 2 4 6 8 10 12 16 20 24 32; do
+    taskset -c "$P0" "$BIN/microbench" mlp 1048576 2000000 $k | awk '{print $5","$7}' >> "$f"
+  done
+}
+
 stream() {
   OMP_NUM_THREADS=$NLOG "$BIN/stream" > "$OUT/stream_all.txt"
   OMP_NUM_THREADS=$NP taskset -c "$P" "$BIN/stream" > "$OUT/stream_P.txt"
@@ -405,6 +414,7 @@ step gprof gprof_run
 step known_answer known_answer
 step papi papi
 step latency latency
+step mlp mlp
 step stream stream
 step scaling scaling
 step o1_compiler o1_compiler

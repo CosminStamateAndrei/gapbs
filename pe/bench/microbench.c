@@ -105,6 +105,34 @@ __attribute__((noinline)) static int do_chase(long size_kb, long steps) {
   return 0;
 }
 
+// K independent pointer chases interleaved: time per load drops with K until
+// the core runs out of miss buffers -> measured memory-level parallelism.
+__attribute__((noinline)) static int do_mlp(long size_kb, long steps, int k) {
+  size_t n = (size_t)size_kb * 1024 / sizeof(node);
+  node *a;
+  if (k < 1 || k > 64 || posix_memalign((void **)&a, 4096, n * sizeof(node))) return 1;
+  size_t *perm = malloc(n * sizeof(size_t));
+  for (size_t i = 0; i < n; i++) perm[i] = i;
+  for (size_t i = n - 1; i > 0; i--) {
+    size_t j = xorshift() % i;
+    size_t t = perm[i]; perm[i] = perm[j]; perm[j] = t;
+  }
+  for (size_t i = 0; i < n; i++) a[i].next = &a[perm[i]];
+  free(perm);
+  node *p[64];
+  for (int c = 0; c < k; c++) p[c] = &a[(n / k) * c];   // k far-apart start points
+  double t0 = now();
+  for (long i = 0; i < steps; i++)
+    for (int c = 0; c < k; c++) p[c] = p[c]->next;
+  double t1 = now();
+  uintptr_t x = 0;
+  for (int c = 0; c < k; c++) x ^= (uintptr_t)p[c];
+  printf("mlp size_kb %ld chains %d ns_per_load %.2f (x %lx)\n", size_kb, k,
+         (t1 - t0) / ((double)steps * k) * 1e9, (unsigned long)x);
+  free(a);
+  return 0;
+}
+
 __attribute__((noinline)) static int do_read(long size_mb) {
   size_t n = (size_t)size_mb * 1024 * 1024 / sizeof(uint64_t);
   uint64_t *a = malloc(n * sizeof(uint64_t));
@@ -126,6 +154,7 @@ int main(int argc, char **argv) {
   if (argc >= 3 && !strcmp(argv[1], "alu")) return do_alu(atol(argv[2]));
   if (argc >= 4 && !strcmp(argv[1], "chase")) return do_chase(atol(argv[2]), atol(argv[3]));
   if (argc >= 3 && !strcmp(argv[1], "read")) return do_read(atol(argv[2]));
-  fprintf(stderr, "usage: %s res | alu N | chase SIZE_KB STEPS | read SIZE_MB\n", argv[0]);
+  if (argc >= 5 && !strcmp(argv[1], "mlp")) return do_mlp(atol(argv[2]), atol(argv[3]), atoi(argv[4]));
+  fprintf(stderr, "usage: %s res | alu N | chase SIZE_KB STEPS | read SIZE_MB | mlp SIZE_KB STEPS K\n", argv[0]);
   return 2;
 }

@@ -1,0 +1,79 @@
+% Owners: Cosmin (laptop), Sergiu (Hábrók counters)
+\section{Performance analysis}
+\label{sec:analysis}
+
+\paragraph{Baseline.} On \texttt{kron20}, unmodified \gapbs{} with the default thread count
+needs a median of \SI{8.58}{ms} per search on the laptop (IQR \SI{4.77}{ms},
+\SI{1.83}{GTEPS}) and \SI{2.85}{ms} on Hábrók (IQR \SI{1.43}{ms}, \SI{5.51}{GTEPS}). The
+server node has 12.8$\times$ more cores and 20$\times$ more bandwidth, yet it is only
+3$\times$ faster. Explaining this gap is the main question of the analysis.
+
+\paragraph{Hotspots.} Table~\ref{tab:hotspots} shows where the laptop spends its time,
+from perf's timer-based sampling (\num{46000} samples, 64 searches, all threads).
+\begin{table}[ht]
+\centering\small
+\caption{Laptop, perf sampling (task-clock, \SI{5}{kHz}), \texttt{kron20}, 64 trials including graph loading.}
+\label{tab:hotspots}
+\begin{tabular}{@{}lrl@{}}
+\toprule
+Symbol & Samples & Role \\
+\midrule
+OpenMP runtime (\texttt{libgomp}, spin-wait at barriers) & \SI{50.0}{\percent} & idle threads \\
+\texttt{BUStep} (outlined parallel region) & \SI{35.8}{\percent} & bottom-up sweep \\
+\texttt{InitParent} & \SI{5.7}{\percent} & per-search initialisation \\
+\texttt{TDStep} & \SI{3.1}{\percent} & top-down expansion \\
+\texttt{BitmapToQueue} + \texttt{QueueToBitmap} & \SI{2.4}{\percent} & frontier conversion \\
+\texttt{DOBFS} (final pass) and rest & \SI{3.0}{\percent} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+Half of all CPU time is threads waiting in the OpenMP runtime. A search consists of about ten
+short parallel regions (Section~\ref{sec:app}), each ending in a barrier, and the work
+inside them is irregular: Kronecker graphs have a heavy-tailed degree distribution, and in
+bottom-up the cost per vertex depends on how soon a frontier neighbour is found. Among the
+useful work, \texttt{BUStep} dominates by an order of magnitude. Instruction-level
+annotation of \texttt{BUStep} (\texttt{pe/results/wsl/perf\_annotate\_all.txt}) puts
+\SI{39}{\percent} of its samples on the instruction right after the load of the first
+neighbour ID. Timer sampling skids to the instruction that consumes a long-latency load, so
+this is the cache miss on the start of each neighbour list. A further \SI{11}{\percent} fall
+on the bitmap bit-test, and about \SI{13}{\percent} on loads of the CSR index. The kernel is
+dominated by memory accesses, not arithmetic.
+
+\paragraph{Hardware counters (Hábrók).} \todo{Per-kernel PAPI table (InitParent, TDStep,
+BUStep, conversions): share of cycles, IPC, L2/L3 misses per examined edge; whole-run
+pecount: IPC, LLC and dTLB misses per search, for 1 thread and 128 threads.}
+
+\paragraph{Thread scaling.} Figure~\ref{fig:scaling} shows the time per search as a function
+of the number of threads. On the laptop the best time is reached at 8 threads
+(\SI{8.39}{ms}); going to 10 adds no speed and greatly increases variance (IQR
+\SI{12.3}{ms}). On Hábrók, time decreases up to 48--64 threads bound to consecutive cores
+(\SI{1.38}{ms}, \SI{11.4}{GTEPS}) and \emph{increases} again beyond, to \SI{3.53}{ms} at 128
+threads. 64 threads bound with \texttt{OMP\_PROC\_BIND=close} fill exactly one socket. Adding
+the second socket adds cross-socket coherence traffic on \texttt{parent} and the bitmaps,
+and more threads per barrier, while each step has less work per thread. Without binding,
+the best time is \SI{2.45}{ms} at 48 threads.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures/scaling.pdf}
+\caption{Time per BFS on \texttt{kron20} vs.\ OpenMP threads, with threads bound to
+consecutive cores (\texttt{OMP\_PROC\_BIND=close}, \texttt{OMP\_PLACES=cores}) and unbound.
+Error bars: IQR.}
+\label{fig:scaling}
+\end{figure}
+
+\paragraph{Memory hierarchy.} Figure~\ref{fig:latency} shows the dependent-load latency of
+both machines, measured with a pointer chase over a random cycle. The steps reveal the cache
+sizes: on Hábrók latency stays at \SIrange{13}{15}{ns} up to \SI{32}{MB} (one CCD's L3) and
+reaches about \SI{99}{ns} in DRAM. On the laptop, DRAM latency grows to \SI{376}{ns} at
+\SI{1}{GB} because of TLB misses under nested paging. The working set of a \texttt{kron20}
+search (Section~\ref{sec:model}) is about \SI{180}{MB}. It exceeds every cache of the laptop.
+On Hábrók it exceeds a single CCD's L3 but fits in the 16 L3 slices combined, so much of it is
+served from remote L3 slices at near-DRAM latency.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.5\linewidth]{figures/latency.pdf}
+\caption{Latency of dependent loads vs.\ working-set size (one core).}
+\label{fig:latency}
+\end{figure}

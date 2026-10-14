@@ -44,6 +44,14 @@ them in the parent array as negative numbers. Thus, the encoding of parent is:
 
 using namespace std;
 
+// -DPE_COUNT_EDGES: count edges examined per step (input for the traffic model)
+#ifdef PE_COUNT_EDGES
+static int64_t pe_td_edges = 0, pe_bu_edges = 0, pe_bu_vertices = 0;
+#define PE_COUNT(var, n) var += (n)
+#else
+#define PE_COUNT(var, n) ((void)0)
+#endif
+
 int64_t BUStep(const Graph &g, pvector<NodeID> &parent, Bitmap &front,
                Bitmap &next) {
   int64_t awake_count = 0;
@@ -51,6 +59,9 @@ int64_t BUStep(const Graph &g, pvector<NodeID> &parent, Bitmap &front,
   #pragma omp parallel
   {
     PE_REGION_BEGIN("BUStep");
+#ifdef PE_COUNT_EDGES
+    int64_t l_edges = 0, l_verts = 0;
+#endif
 #ifdef OMP_RUNTIME_SCHED
     #pragma omp for reduction(+ : awake_count) schedule(runtime)
 #else
@@ -58,7 +69,9 @@ int64_t BUStep(const Graph &g, pvector<NodeID> &parent, Bitmap &front,
 #endif
     for (NodeID u=0; u < g.num_nodes(); u++) {
       if (parent[u] < 0) {
+        PE_COUNT(l_verts, 1);
         for (NodeID v : g.in_neigh(u)) {
+          PE_COUNT(l_edges, 1);
           if (front.get_bit(v)) {
             parent[u] = v;
             awake_count++;
@@ -68,6 +81,12 @@ int64_t BUStep(const Graph &g, pvector<NodeID> &parent, Bitmap &front,
         }
       }
     }
+#ifdef PE_COUNT_EDGES
+    #pragma omp atomic
+    pe_bu_edges += l_edges;
+    #pragma omp atomic
+    pe_bu_vertices += l_verts;
+#endif
     PE_REGION_END("BUStep");
   }
   return awake_count;
@@ -81,6 +100,9 @@ int64_t TDStep(const Graph &g, pvector<NodeID> &parent,
   {
     PE_REGION_BEGIN("TDStep");
     QueueBuffer<NodeID> lqueue(queue);
+#ifdef PE_COUNT_EDGES
+    int64_t l_edges = 0;
+#endif
 #ifdef OMP_RUNTIME_SCHED
     #pragma omp for reduction(+ : scout_count) nowait schedule(runtime)
 #else
@@ -99,6 +121,7 @@ int64_t TDStep(const Graph &g, pvector<NodeID> &parent,
 #else
       for (NodeID v : g.out_neigh(u)) {
 #endif
+        PE_COUNT(l_edges, 1);
         NodeID curr_val = parent[v];
         if (curr_val < 0) {
           if (compare_and_swap(parent[v], curr_val, u)) {
@@ -109,6 +132,10 @@ int64_t TDStep(const Graph &g, pvector<NodeID> &parent,
       }
     }
     lqueue.flush();
+#ifdef PE_COUNT_EDGES
+    #pragma omp atomic
+    pe_td_edges += l_edges;
+#endif
     PE_REGION_END("TDStep");
   }
   return scout_count;
@@ -220,6 +247,11 @@ pvector<NodeID> DOBFS(const Graph &g, NodeID source, bool logging_enabled = fals
   for (NodeID n = 0; n < g.num_nodes(); n++)
     if (parent[n] < -1)
       parent[n] = -1;
+#ifdef PE_COUNT_EDGES
+  cout << "EdgeCount td_edges " << pe_td_edges << " bu_edges " << pe_bu_edges
+       << " bu_vertices " << pe_bu_vertices << endl;
+  pe_td_edges = pe_bu_edges = pe_bu_vertices = 0;
+#endif
   return parent;
 }
 

@@ -1,0 +1,65 @@
+% Owner: Cosmin
+\section{Measurement method and tool validation}
+\label{sec:method}
+
+\paragraph{Instrumentation without changing the baseline.} All modifications are
+compile-time switches collected in \texttt{src/pe\_opts.h}. Without them, the code is
+upstream \gapbs; we only split each \texttt{\#pragma omp parallel for} into
+\texttt{parallel} + \texttt{for}, which has the same semantics. Switches select PAPI regions
+inside every parallel region (the PAPI high-level API counts only the calling thread),
+edge counting, \texttt{schedule(runtime)}, prefetching, huge pages, parallel first touch,
+relabelling and the $\alpha/\beta$ thresholds. A build script compiles 30 variants, and
+\emph{every variant must pass \gapbs' BFS verifier} (\texttt{-v}) before it is timed.
+
+\paragraph{Timing protocol.} Each configuration is run as 1 discarded process followed by 5
+processes of 24 BFS trials from pseudo-random sources (identical sources across variants
+and machines). The trial time is \gapbs' own timer around one search. Within a process the
+first trials are slow (Figure~\ref{fig:warmup}): on Hábrók the first five trials take
+\SIrange{99}{156}{ms} against about \SI{4}{ms} afterwards. We therefore drop trials 1--5 of
+every process, leaving 95 samples per configuration. We report the median and the
+interquartile range (IQR) in ms per trial, and GTEPS $= m/t_\text{median}$. With IQRs
+between \SI{14}{\percent} (Hábrók, kron22) and \SI{56}{\percent} (laptop, kron20) of the
+median, we treat
+differences smaller than the IQR as not significant.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.48\linewidth]{figures/warmup.pdf}
+\caption{Per-trial time within one process (128 trials, log scale). The slow first trials
+(Hábrók) and the sporadic outliers (laptop) motivate dropping trials 1--5 and reporting
+medians.}
+\label{fig:warmup}
+\end{figure}
+
+\paragraph{Validating the tools.} A tool is only useful if it measures what we think it
+measures. Table~\ref{tab:validation} lists our checks.
+\begin{table}[ht]
+\centering\small
+\caption{Cross-validation of measurement tools.}
+\label{tab:validation}
+\begin{tabular}{@{}p{3.3cm}p{6.2cm}p{4.6cm}@{}}
+\toprule
+Check & Result & Conclusion \\
+\midrule
+Timer resolution & \texttt{CLOCK\_MONOTONIC}: \SI{1}{ns}; call overhead \SIrange{34}{36}{ns} & negligible vs.\ \SI{1.4}{ms}+ trials \\
+Wall time, 3 tools (laptop, 64 trials) & \gapbs{} read+trials \SI{0.679}{s}; perf \texttt{duration\_time} \SI{0.717}{s}; \texttt{/usr/bin/time} \SI{0.69}{s} & agree; \SI{38}{ms} = process start-up and allocation \\
+CPU time, 2 tools & perf task-clock \SI{6.00}{s}; \texttt{time} user+sys \SI{6.05}{s} & agree within \SI{1}{\percent} \\
+pecount vs.\ perf & page faults \num{36422} vs.\ \num{36423} & pecount reproduces perf \\
+gprof & \SI{100}{\percent} of samples attributed to \texttt{frame\_dummy} & \textbf{unusable} for OpenMP (samples only the main thread; outlined regions unresolved) \\
+perf sampling & BUStep, InitParent, TDStep resolved; libgomp unresolved but attributed by DSO & reliable \\
+PAPI vs.\ pecount (Hábrók) & \todo{same events, 1 thread: PAPI region sum vs.\ pecount delta} & \\
+Known answers (Hábrók) & \todo{alu: instr./iteration = loop length; chase: $\approx$1 LLC/TLB miss per step} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{A correctness check that found a data race.} Verifying every variant paid off.
+With \texttt{schedule(runtime)} and \texttt{OMP\_SCHEDULE=dynamic,100} or \texttt{guided},
+\emph{every} search produced a wrong BFS tree (0/8 verified on both machines), and
+\texttt{static,1000} failed 4/8 times on the laptop and 8/8 on Hábrók. Plain \texttt{static}
+passed, but only by chance: its block boundaries are not guaranteed to fall on word
+boundaries either. \texttt{BUStep} sets
+bits of the shared \texttt{next} bitmap with a non-atomic read-modify-write of a 64-bit word.
+This is only safe when every thread's block of vertices starts on a word boundary, that is,
+when the chunk size is a multiple of 64. Upstream's \texttt{dynamic,1024} satisfies this
+implicitly. We restricted the schedule experiments to chunk sizes that are multiples of 64.

@@ -23,5 +23,6 @@ export LD_LIBRARY_PATH=$P/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 echo "node $(hostname), $(nproc) CPUs, papi: $(command -v papi_avail || echo missing)"
 papi_avail 2>&1 | grep -E 'PAPI version|Number Hardware Counters|PAPI_TOT_CYC|PAPI_L2_DCM|PAPI_L3_TCM'
 
-ONLY="sysinfo build verify timers counters_base known_answer papi o1_compiler o3_hugepages o4_prefetch o5_relabel big_graph o6_first_touch package" \
+# override with: sbatch --export=ALL,ONLY="build mlp" pe/scripts/habrok_counters_job.sh
+ONLY=${ONLY:-"sysinfo build verify timers counters_base known_answer papi mlp o1_compiler o3_hugepages o4_prefetch o5_relabel big_graph o6_first_touch package"} \
 NO_TIMING=1 MACHINE=habrok SKIP_APT=1 SET_SYS=0 bash pe/scripts/batch_all.sh

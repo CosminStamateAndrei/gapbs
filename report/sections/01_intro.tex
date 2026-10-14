@@ -1,0 +1,35 @@
+% Owner: Sergiu
+\section{Introduction}
+
+Graph traversal is a computational dwarf whose performance is governed by irregular memory
+accesses rather than arithmetic. Breadth-first search (BFS) is its canonical kernel: it is the
+first kernel of Graph500~\cite{graph500} and of the GAP Benchmark Suite (\gapbs)~\cite{beamer2015gap}.
+Its intensity is far below one operation per byte, so useful
+models must describe data movement, latency and synchronisation instead of floating-point
+throughput.
+
+The goal of this project is not the fastest possible BFS. It is a systematic performance
+engineering process applied to the \gapbs{} reference implementation: (i)~analysing it with
+several tools whose correctness we check, (ii)~explaining the measurements with a
+semi-analytical model whose parameters come from our own benchmarks, and (iii)~choosing,
+implementing and assessing optimisations that the analysis and the model motivate.
+
+Our contributions are:
+\begin{itemize}
+  \item a measurement pipeline that runs every experiment from one script per platform, with
+        compile-time switches that leave the default build identical to upstream
+        (Section~\ref{sec:method});
+  \item a cross-validation of five measurement tools, including the observation that gprof
+        cannot attribute time in OpenMP code, and a latent data race in the bottom-up step
+        that appears when the OpenMP schedule is changed (Section~\ref{sec:analysis});
+  \item a traffic and latency model based on instrumented edge counts, which explains the
+        single-thread and laptop results and isolates the synchronisation overhead on a
+        128-core node (Section~\ref{sec:model});
+  \item an evaluation of seven optimisation strategies on two architectures
+        (Section~\ref{sec:opt}).
+\end{itemize}
+
+Our work plan targeted a laptop and a cluster with hardware counters. The HAICGU cluster was
+not available to us, so we used the RUG Hábrók cluster instead. We also extended the planned
+compiler-level optimisations with memory-subsystem and parallel-runtime optimisations, because
+the analysis showed that these dominate.

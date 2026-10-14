@@ -1,0 +1,39 @@
+% Owner: Sergiu
+\section{Application: direction-optimising BFS in \gapbs}
+\label{sec:app}
+
+\gapbs{} stores graphs in compressed sparse row (CSR) form: an index array of $n{+}1$ 8-byte
+pointers and a neighbour array of 4-byte vertex IDs. An undirected graph stores every edge in
+both directions. Our main input is a Kronecker graph with scale 20 (\texttt{kron20}:
+$n = 2^{20}$ vertices, $m = \num{15699691}$ undirected edges, \SI{136}{MB} in memory). It is
+generated once and loaded from a serialised file, because generating and building the graph
+took \SI{84}{\percent} of a naive benchmark run. Larger graphs (\texttt{kron22},
+\texttt{kron24}: \SIlist{0.5;2.1}{GB}) are used to vary the working set.
+
+The kernel (\texttt{src/bfs.cc}) implements direction-optimising BFS~\cite{beamer2012do}. It
+returns the BFS parent of every vertex and uses five performance-relevant routines:
+\begin{description}
+  \item[\texttt{TDStep}] (top-down): every vertex in the frontier queue scans its neighbours and
+        claims unvisited ones with an atomic compare-and-swap on \texttt{parent[v]}. The access to
+        \texttt{parent[v]} is random. Parallelised over the queue (static schedule).
+  \item[\texttt{BUStep}] (bottom-up): every \emph{unvisited} vertex scans its neighbours until
+        it finds one in the frontier bitmap, then stops (early exit). It sweeps all $n$
+        vertices; neighbour lists are read from their start. Parallelised with
+        \texttt{schedule(dynamic,1024)}.
+  \item[\texttt{QueueToBitmap}, \texttt{BitmapToQueue}] convert the frontier when the
+        direction changes.
+  \item[\texttt{InitParent}] initialises \texttt{parent} with negated degrees once per search.
+\end{description}
+\texttt{DOBFS} switches to bottom-up when the edges leaving the frontier exceed
+$1/\alpha$ of the unexplored edges, and back when the frontier shrinks below $n/\beta$
+(defaults $\alpha{=}15$, $\beta{=}18$).
+
+\paragraph{Work actually performed.} We added an optional edge counter
+(\texttt{-DPE\_COUNT\_EDGES}). Averaged over 16 searches on \texttt{kron20}, a search performs
+4.25 top-down and 2.5 bottom-up steps and examines \num{286935} edges top-down and
+\num{1202922} edges bottom-up. That is only \SI{4.7}{\percent} of the \num{31399382}
+directed edges. Bottom-up checks \num{1659885} vertices in total, most of which find a parent
+in the frontier after reading fewer than one cache line of neighbours. Throughput is
+conventionally reported in traversed edges per second (TEPS), counting all $m$ input edges
+(we follow this convention). TEPS therefore overstates the edges actually touched by about
+$20\times$, and a model must be based on the real work (Section~\ref{sec:model}).

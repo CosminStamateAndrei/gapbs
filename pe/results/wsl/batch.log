@@ -49,3 +49,8 @@
 [10:59:06] GH_TOKEN not set: push manually or upload /root/wsl_results_1059.tar.gz
 [10:59:06] === OK    package (0 s)
 [10:59:06] batch_all done. Failed steps: counters_base papi o1_compiler o4_prefetch o5_relabel big_graph
+[11:29:15] batch_all start (QUICK=0) on DESKTOP-QNAF4F0, kernel 6.18.54.1-microsoft-standard-WSL2
+[11:29:15] logical CPUs 10, physical cores 10, P-cores [0-9] (10), E-cores [none]
+[11:29:15] === START mlp
+[11:29:32] === OK    mlp (17 s)
+[11:29:32] batch_all done. Failed steps: none
