@@ -50,9 +50,12 @@ most of it; \texttt{-O2} and \texttt{-O3} are indistinguishable within the IQR.
 report explains why: no hot loop is vectorised. The \texttt{BUStep} inner loop is rejected
 because of \emph{control flow in loop} (the early \texttt{break}), its outer loop because of
 \emph{multiple nested loops}, and \texttt{TDStep} because the atomic compare-and-swap
-\emph{clobbers memory}. Vectorising BFS would need a different algorithm formulation. The
-model also shows the bottleneck is in the memory system, so the instruction count matters
-little once \texttt{-O1} has removed the gross overhead.
+\emph{clobbers memory}. Vectorising BFS would need a different algorithm formulation. For
+the same reason we did not apply the classic loop transformations (unrolling, unroll-and-jam,
+interchange): BFS's loops have data-dependent trip counts and early exits, and
+\texttt{-O3} already unrolls where possible. The model also shows the bottleneck is in the
+memory system, so the instruction count matters little once \texttt{-O1} has removed the
+gross overhead.
 
 \subsection{O2: OpenMP scheduling, binding and thread count}
 \emph{Rationale.} Half of the samples are spent in the OpenMP runtime

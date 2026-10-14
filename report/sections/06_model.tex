@@ -3,7 +3,9 @@
 \label{sec:model}
 
 \paragraph{Choice of model.} BFS executes almost no floating-point operations, so a classic
-roofline in FLOP/byte~\cite{roofline} has nothing to place on its horizontal axis. The ECM
+roofline in FLOP/byte~\cite{roofline} has nothing to place on its horizontal axis. Measured
+in its own unit of work, the arithmetic intensity is only $1.49\,\text{M}$ examined edges
+per \SI{179}{MB} $\approx$ \num{0.008} edges per byte. The ECM
 model needs a steady-state loop with predictable data transfers per iteration, so that the
 in-core and transfer times can be added up. BFS has data-dependent early exits, atomic
 updates and a work distribution that changes at every level, so ECM's assumptions do not
@@ -29,8 +31,9 @@ top-down, every examined edge costs 4 bytes of neighbour ID plus one random line
 \texttt{parent}. Sweeps over \texttt{parent} (\SI{4}{B}), the CSR index (\SI{8}{B}) and the
 bitmaps are sequential. MLP was measured with up to 32 interleaved pointer chases on one
 core. On the laptop the time per load falls from \SI{262}{ns} with one chain to
-\SI{17}{ns} with 16 chains, giving MLP $= 15.7$. This matches the 16 fill buffers of a Golden
-Cove core. On Hábrók the time per load falls from \SI{101}{ns} to \SI{4.65}{ns} with 32
+\SI{17}{ns} with 16 chains, giving MLP $= 15.7$. This is consistent with the 16 L1 miss
+status handling registers (MSHRs, also called fill buffers) of a Golden Cove core, which
+limit the number of outstanding misses. On Hábrók the time per load falls from \SI{101}{ns} to \SI{4.65}{ns} with 32
 chains, giving MLP $= 21.7$.
 
 \begin{table}[ht]

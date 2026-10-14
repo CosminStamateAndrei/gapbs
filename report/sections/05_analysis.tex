@@ -66,7 +66,11 @@ cycle. In
 \texttt{parent[v]} accesses. In \texttt{BUStep} only a third of the checked vertices miss:
 consecutive vertices' neighbour lists are adjacent in the CSR array, so the hardware
 prefetcher hides many of them. The conversion kernels are streaming bit operations with high
-IPC and negligible cost. The data TLB is not a factor on Hábrók: with transparent huge pages
+IPC and negligible cost. Branches are a second, smaller limiter: a single-thread search
+mispredicts 2.3 million of 17.8 million branches (\SI{12.9}{\percent}, pecount). This mostly
+comes from the data-dependent bitmap test and the early exit in \texttt{BUStep}. At a typical
+penalty of 10--20 cycles, these mispredictions overlap with, but can account for a
+substantial fraction of, the 87 million cycles per search. The data TLB is not a factor on Hábrók: with transparent huge pages
 always on, a search causes about 4,200 dTLB misses against roughly 2 million random line
 accesses. Counter runs with 128 threads include the five slow warm-up trials, which dominate
 their wall time, so we do not use them quantitatively.

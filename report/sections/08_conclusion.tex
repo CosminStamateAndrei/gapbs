@@ -24,7 +24,9 @@ trials, so we use only single-thread counters quantitatively.
 node. Results on \texttt{kron22}/\texttt{kron24} show the expected higher GTEPS with
 growing work per barrier (\SI{6.8}{GTEPS} on \texttt{kron24}).
 
-\paragraph{Future work.} Hardware counters on the laptop through a native Linux boot; the
-Apple Silicon comparison planned in our work plan; a NUMA-aware partitioning of the bottom-up
-sweep; and fusing the short parallel regions of a BFS level to remove barriers. The latter
-addresses the dominant cost we identified.
+\paragraph{Future work.} Hardware counters on the laptop through a native Linux boot, which
+would also allow a top-down microarchitecture analysis; the Apple Silicon comparison planned
+in our work plan; a branch-free bitmap test in \texttt{BUStep} against the
+\SI{12.9}{\percent} misprediction rate; a NUMA-aware partitioning of the bottom-up sweep; and
+fusing the short parallel regions of a BFS level to remove barriers, analogous to loop
+fusion. The last one addresses the dominant cost we identified.
