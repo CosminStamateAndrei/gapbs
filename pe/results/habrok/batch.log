@@ -81,3 +81,6 @@
 [11:48:28] === OK    o6_first_touch (54 s)
 [11:48:28] === START package
 [11:48:29] results archived to /home5/s5524032/habrok_results_1148.tar.gz
+[11:48:31] GH_TOKEN not set: push manually or upload /home5/s5524032/habrok_results_1148.tar.gz
+[11:48:31] === OK    package (3 s)
+[11:48:31] batch_all done. Failed steps: none
