@@ -40,6 +40,8 @@ if [ "$OS" = Linux ]; then
   build bfs_thp -O3 -DPE_THP_REPORT
   build bfs_huge -O3 -DUSE_HUGEPAGES -DPE_THP_REPORT
   build bfs_pg -O3 -pg
+  build bfs_ft -O3 -DPAR_FIRST_TOUCH
+  $CC -O2 -o "$BIN/pecount" pe/bench/pecount.c -lm || FAIL=1
   if echo '#include <papi.h>' | $CXX -E -x c++ - > /dev/null 2>&1; then
     HAVE_PAPI=1
     LIBS=-lpapi build bfs_papi -O3 -DUSE_PAPI

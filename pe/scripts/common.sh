@@ -36,6 +36,8 @@ FAILED_STEPS=""
 # step NAME command...  -> runs, logs, never aborts the batch
 step() {
   local name=$1; shift
+  # ONLY="a b c" runs just those steps (used for partial re-runs)
+  if [ -n "${ONLY:-}" ] && ! echo " $ONLY " | grep -q " $name "; then return 0; fi
   log "=== START $name"
   local t0; t0=$(date +%s)
   if "$@" >> "$RAW/step_$name.log" 2>&1; then

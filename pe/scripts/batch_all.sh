@@ -24,6 +24,10 @@ export CSV=$OUT/timings.csv
 PERF=$OUT/perf; mkdir -p "$PERF"
 chmod +x "$ROOT"/pe/scripts/*.sh
 RUN="$ROOT/pe/scripts/run_bfs.sh"
+RUN_T=$RUN                             # always times, even with NO_TIMING=1
+[ "${NO_TIMING:-0}" = 1 ] && RUN=true   # counters-only re-run: skip timing runs
+# perf if installed, otherwise our perf_event_open wrapper (same CSV format)
+if command -v perf > /dev/null; then PSTAT="perf stat"; else PSTAT="$ROOT/pe/bin/pecount"; fi
 log "batch_all start (QUICK=$QUICK) on $(hostname), kernel $(uname -r)"
 
 P=$(pcores); E=$(ecores)
@@ -46,7 +50,7 @@ pstat() {
   for g in $groups; do
     i=$((i+1))
     for n in 0 $NTR; do
-      $PREFIX perf stat -x, -r "$PSTAT_R" -e "$g" -o "$PERF/${v}__g${i}__n${n}.csv" \
+      $PREFIX $PSTAT -x, -r "$PSTAT_R" -e "$g" -o "$PERF/${v}__g${i}__n${n}.csv" \
         -- "$b" -f "$GRAPH" -n "$n" > /dev/null
     done
   done
@@ -145,7 +149,7 @@ timers() {
   "$BIN/microbench" res > "$OUT/timer_resolution.txt"
   local r
   for r in $(seq 1 5); do
-    perf stat -x, -e duration_time,task-clock -o "$OUT/timers_perf_$r.csv" -- \
+    $PSTAT -x, -e duration_time,task-clock -o "$OUT/timers_perf_$r.csv" -- \
       /usr/bin/time -f "%e %U %S" -o "$OUT/timers_time_$r.txt" \
       "$BIN/bfs_base" -f "$GRAPH" -n "$NTR" > "$OUT/timers_gapbs_$r.txt"
   done
@@ -165,7 +169,9 @@ profile() {
   perf report -i "$RAW/perf.data" --stdio --no-children --sort dso,symbol --percent-limit 0.3 -g none > "$OUT/perf_report_dso.txt"
   perf report -i "$RAW/perf.data" --stdio --no-children --sort cpu -g none > "$OUT/perf_report_cpu.txt"
   perf report -i "$RAW/perf.data" --stdio --children --sort symbol --percent-limit 1 -g caller > "$OUT/perf_report_callgraph.txt"
-  perf annotate -i "$RAW/perf.data" --stdio 2>/dev/null | head -c 30000000 > "$OUT/perf_annotate_all.txt"
+  # only our binary (kernel/libgomp symbols can hang without vmlinux), time-limited
+  timeout 300 perf annotate -i "$RAW/perf.data" --stdio --dsos bfs_base 2>/dev/null \
+    | head -c 30000000 > "$OUT/perf_annotate_all.txt" || true
   # same on P-cores only, to see the kernel mix without E-core skew
   taskset -c "$P" perf record -F 4999 -g -o "$RAW/perf_P.data" -- "$BIN/bfs_base" -f "$GRAPH" -n "$NTR" > /dev/null
   perf report -i "$RAW/perf_P.data" --stdio --no-children --sort symbol --percent-limit 0.3 > "$OUT/perf_report_symbols_P.txt"
@@ -186,12 +192,15 @@ known_answer() {
   : > "$f"
   for n in 500000000 1000000000; do
     echo "## alu $n" >> "$f"
-    taskset -c "$P0" perf stat -x, -e instructions:u,cycles:u -- "$BIN/microbench" alu $n >> "$f" 2>&1
+    taskset -c "$P0" $PSTAT -x, -e instructions:u,cycles:u -o "$f.tmp" -- "$BIN/microbench" alu $n >> "$f" 2>&1
+    cat "$f.tmp" >> "$f"
   done
   for n in 10000000 20000000; do
     echo "## chase 1048576KB $n" >> "$f"
-    taskset -c "$P0" perf stat -x, -e cache-misses:u,LLC-load-misses:u,dTLB-load-misses:u -- "$BIN/microbench" chase 1048576 $n >> "$f" 2>&1
+    taskset -c "$P0" $PSTAT -x, -e cache-misses:u,LLC-load-misses:u,dTLB-load-misses:u,L1-dcache-load-misses:u -o "$f.tmp" -- "$BIN/microbench" chase 1048576 $n >> "$f" 2>&1
+    cat "$f.tmp" >> "$f"
   done
+  rm -f "$f.tmp"
   objdump -d --no-show-raw-insn "$BIN/microbench" | awk '/<do_alu>:/,/^$/' > "$OUT/known_answer_alu_disasm.txt"
 }
 
@@ -337,6 +346,21 @@ big_graph() {
   done
 }
 
+o6_first_touch() {
+  # NUMA without numactl: parallel first touch of the edge array (-DPAR_FIRST_TOUCH)
+  # vs the default single-threaded file read, unbound and with spread binding
+  [ -x "$BIN/bfs_ft" ] || { echo "no bfs_ft"; return 1; }
+  lscpu | grep -i numa > "$OUT/numa_lscpu.txt"
+  local s G
+  for s in 20 22 24; do
+    G=$ROOT/kron$s.sg; [ -f "$G" ] || continue
+    GRAPH=$G CORESET=all "$RUN_T" "$BIN/bfs_base" "O6-k$s-base"
+    GRAPH=$G CORESET=all "$RUN_T" "$BIN/bfs_ft" "O6-k$s-firsttouch"
+    OMP_PROC_BIND=spread OMP_PLACES=cores GRAPH=$G CORESET=all "$RUN_T" "$BIN/bfs_base" "O6-k$s-base"
+    OMP_PROC_BIND=spread OMP_PLACES=cores GRAPH=$G CORESET=all "$RUN_T" "$BIN/bfs_ft" "O6-k$s-firsttouch"
+  done
+}
+
 numa() {
   # multi-socket nodes only: first-touch default vs interleaved pages
   command -v numactl >/dev/null || { echo "no numactl"; return 0; }
@@ -391,6 +415,7 @@ step o5_relabel o5_relabel
 step alphabeta alphabeta
 [ "$QUICK" = 1 ] || step big_graph big_graph
 [ "$QUICK" = 1 ] || step numa numa
+step o6_first_touch o6_first_touch
 [ "$QUICK" = 1 ] || step package package
 
 log "batch_all done. Failed steps:${FAILED_STEPS:- none}"

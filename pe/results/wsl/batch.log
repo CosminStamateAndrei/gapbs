@@ -46,3 +46,6 @@
 [10:59:06] === OK    numa (1 s)
 [10:59:06] === START package
 [10:59:06] results archived to /root/wsl_results_1059.tar.gz
+[10:59:06] GH_TOKEN not set: push manually or upload /root/wsl_results_1059.tar.gz
+[10:59:06] === OK    package (0 s)
+[10:59:06] batch_all done. Failed steps: counters_base papi o1_compiler o4_prefetch o5_relabel big_graph
