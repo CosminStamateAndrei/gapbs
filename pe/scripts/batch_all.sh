@@ -8,7 +8,7 @@
 # A failing step is logged and skipped; the list of failures is printed at the end.
 # Expected duration of the full run: ~30-45 min.
 set -u
-export MACHINE=x86
+export MACHINE=${MACHINE:-x86}     # MACHINE=wsl keeps WSL results separate
 . "$(dirname "$0")/common.sh"
 cd "$ROOT"
 
@@ -17,8 +17,9 @@ if [ "$QUICK" = 1 ]; then
   export REPS=1 TRIALS=8; PSTAT_R=1; NTR=8; SKIP_APT=${SKIP_APT:-1}; SET_SYS=0
   OUT=$ROOT/pe/results/x86_quick; RAW=$OUT/raw; export OUT_DIR=$OUT; mkdir -p "$RAW"
 else
-  export REPS=${REPS:-5} TRIALS=${TRIALS:-24}; PSTAT_R=5; NTR=64; SKIP_APT=${SKIP_APT:-0}; SET_SYS=1
+  export REPS=${REPS:-5} TRIALS=${TRIALS:-24}; PSTAT_R=5; NTR=64; SKIP_APT=${SKIP_APT:-0}; SET_SYS=${SET_SYS:-1}
 fi
+# SET_SYS=0 (cluster, WSL): no sysctl / governor / THP-mode changes (needs root)
 export CSV=$OUT/timings.csv
 PERF=$OUT/perf; mkdir -p "$PERF"
 chmod +x "$ROOT"/pe/scripts/*.sh
@@ -116,15 +117,23 @@ verify_all() {
 # ---------------------------------------------------------------- 4 baseline
 baseline() {
   CORESET=all "$RUN" "$BIN/bfs_base" base
-  PREFIX="taskset -c $P" CORESET=P "$RUN" "$BIN/bfs_base" base
-  [ -n "$E" ] && PREFIX="taskset -c $E" CORESET=E "$RUN" "$BIN/bfs_base" base
+  if [ -n "$E" ]; then
+    PREFIX="taskset -c $P" CORESET=P "$RUN" "$BIN/bfs_base" base
+    PREFIX="taskset -c $E" CORESET=E "$RUN" "$BIN/bfs_base" base
+  fi
+  # one thread per physical core (SMT siblings idle)
+  OMP_NUM_THREADS=$NPHYS OMP_PROC_BIND=close OMP_PLACES=cores CORESET=all "$RUN" "$BIN/bfs_base" base-1-per-core
   # one long run to show the per-process warm-up (first trials slower)
   CORESET=all "$RUN" "$BIN/bfs_base" base-warmup 1 128
 }
 
 scaling() {
   local list t
-  list=$(printf '%s\n' 1 2 4 $(seq 6 2 "$NPHYS") "$NPHYS" "$NP" "$NLOG" | sort -n | uniq | awk -v m="$NLOG" '$1<=m')
+  if [ "$NPHYS" -gt 32 ]; then   # server node: powers of two
+    list=$(printf '%s\n' 1 2 4 8 16 32 48 64 96 128 "$NPHYS" "$NLOG" | sort -n | uniq | awk -v m="$NLOG" '$1<=m')
+  else
+    list=$(printf '%s\n' 1 2 4 $(seq 6 2 "$NPHYS") "$NPHYS" "$NP" "$NLOG" | sort -n | uniq | awk -v m="$NLOG" '$1<=m')
+  fi
   for t in $list; do
     OMP_NUM_THREADS=$t OMP_PROC_BIND=close OMP_PLACES=cores CORESET=all "$RUN" "$BIN/bfs_base" scaling-bound
     OMP_NUM_THREADS=$t CORESET=all "$RUN" "$BIN/bfs_base" scaling-unbound
@@ -264,6 +273,17 @@ thp_set() { [ "$SET_SYS" = 1 ] && echo "$1" > /sys/kernel/mm/transparent_hugepag
 o3_hugepages() {
   local orig; orig=$(sed 's/.*\[\(.*\)\].*/\1/' /sys/kernel/mm/transparent_hugepage/enabled)
   local f="$OUT/thp_usage.txt"; : > "$f"
+  if [ "$SET_SYS" != 1 ]; then
+    # no root: keep the system THP mode, compare base vs madvise patch only
+    echo "system THP mode: $orig" >> "$f"
+    CORESET=all "$RUN" "$BIN/bfs_thp" "O3-thp-$orig-base"
+    PREFIX="" pstat "O3-thp-$orig-base" "$BIN/bfs_thp" "$G3"
+    echo "$orig/base: $("$BIN/bfs_thp" -f "$GRAPH" -n 1 | grep THP | tr '\n' ' ')" >> "$f"
+    CORESET=all "$RUN" "$BIN/bfs_huge" "O3-thp-$orig-huge"
+    PREFIX="" pstat "O3-thp-$orig-huge" "$BIN/bfs_huge" "$G3"
+    echo "$orig/huge: $("$BIN/bfs_huge" -f "$GRAPH" -n 1 | grep THP | tr '\n' ' ')" >> "$f"
+    return 0
+  fi
   thp_set never
   CORESET=all "$RUN" "$BIN/bfs_thp" O3-thp-never
   PREFIX="" pstat O3-thp-never "$BIN/bfs_thp" "$G3"
@@ -303,19 +323,39 @@ alphabeta() {
   "$BIN/bfs_base" -f "$GRAPH" -n 1 -l > "$OUT/bfs_steps_log.txt"   # per-step direction + times
 }
 big_graph() {
-  local G22=$ROOT/kron22.sg
-  [ -f "$G22" ] || ./converter -g 22 -b "$G22"
-  local v
-  for v in base huge pf8 relabel; do
-    GRAPH=$G22 CORESET=all "$RUN" "$BIN/bfs_$v" "big-$v"
+  # kron22 (~0.5 GB CSR) everywhere; kron24 (~2 GB) only on large machines,
+  # to push the working set beyond a server's last-level cache
+  local scales="22" s v
+  [ "$NLOG" -ge 64 ] && scales="22 24"
+  for s in $scales; do
+    local G=$ROOT/kron$s.sg
+    [ -f "$G" ] || ./converter -g $s -b "$G"
+    for v in base huge pf8 relabel; do
+      [ -x "$BIN/bfs_$v" ] && GRAPH=$G CORESET=all "$RUN" "$BIN/bfs_$v" "big$s-$v"
+    done
+    GRAPH=$G PREFIX="" pstat "big$s-base" "$BIN/bfs_base" "$G1 $G2 $G3"
   done
-  GRAPH=$G22 PREFIX="" pstat big-base "$BIN/bfs_base" "$G2 $G3"
+}
+
+numa() {
+  # multi-socket nodes only: first-touch default vs interleaved pages
+  command -v numactl >/dev/null || { echo "no numactl"; return 0; }
+  local nodes; nodes=$(numactl -H | awk '/^available:/{print $2}')
+  numactl -H > "$OUT/numa.txt"
+  [ "${nodes:-1}" -gt 1 ] || { echo "single NUMA node"; return 0; }
+  CORESET=all "$RUN" "$BIN/bfs_base" O6-numa-default
+  PREFIX="numactl --interleave=all" CORESET=all "$RUN" "$BIN/bfs_base" O6-numa-interleave
+  PREFIX="numactl --interleave=all" pstat O6-numa-interleave "$BIN/bfs_base" "$G1 $G2"
+  OMP_PROC_BIND=spread OMP_PLACES=cores PREFIX="numactl --interleave=all" CORESET=all "$RUN" "$BIN/bfs_base" O6-numa-interleave-spread
+  local s=22; [ -f "$ROOT/kron24.sg" ] && s=24
+  GRAPH=$ROOT/kron$s.sg CORESET=all "$RUN" "$BIN/bfs_base" "big$s-numa-default"
+  GRAPH=$ROOT/kron$s.sg PREFIX="numactl --interleave=all" CORESET=all "$RUN" "$BIN/bfs_base" "big$s-numa-interleave"
 }
 
 # ---------------------------------------------------------------- 8 package
 package() {
   rm -f "$RAW"/perf*.data*
-  local tgz=/root/x86_results_$(date +%H%M).tar.gz
+  local tgz=$HOME/${MACHINE}_results_$(date +%H%M).tar.gz
   tar czf "$tgz" -C "$ROOT" "pe/results/$(basename "$OUT")"
   log "results archived to $tgz"
   git add "pe/results/$(basename "$OUT")"
@@ -350,6 +390,7 @@ step o4_prefetch o4_prefetch
 step o5_relabel o5_relabel
 step alphabeta alphabeta
 [ "$QUICK" = 1 ] || step big_graph big_graph
+[ "$QUICK" = 1 ] || step numa numa
 [ "$QUICK" = 1 ] || step package package
 
 log "batch_all done. Failed steps:${FAILED_STEPS:- none}"

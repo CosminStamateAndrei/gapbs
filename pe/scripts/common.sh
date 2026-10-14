@@ -14,8 +14,8 @@ mkdir -p "$OUT" "$RAW" "$BIN"
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT/batch.log"; }
 
-# Number of logical CPUs (respects nothing; use cpulist_count for a taskset list)
-ncpu() { if command -v nproc >/dev/null 2>&1; then nproc --all; else sysctl -n hw.ncpu; fi; }
+# Number of logical CPUs this process may use (respects Slurm/cgroup affinity)
+ncpu() { if command -v nproc >/dev/null 2>&1; then nproc; else sysctl -n hw.ncpu; fi; }
 
 # "0-3,8,10-11" -> 7
 cpulist_count() {

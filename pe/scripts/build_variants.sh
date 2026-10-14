@@ -40,10 +40,11 @@ if [ "$OS" = Linux ]; then
   build bfs_thp -O3 -DPE_THP_REPORT
   build bfs_huge -O3 -DUSE_HUGEPAGES -DPE_THP_REPORT
   build bfs_pg -O3 -pg
-  if [ -f /usr/include/papi.h ]; then
+  if echo '#include <papi.h>' | $CXX -E -x c++ - > /dev/null 2>&1; then
+    HAVE_PAPI=1
     LIBS=-lpapi build bfs_papi -O3 -DUSE_PAPI
   else
-    echo "  (papi.h not found: skipping bfs_papi; install libpapi-dev)"
+    echo "  (papi.h not found: skipping bfs_papi; install libpapi-dev or module load PAPI)"
   fi
 fi
 
@@ -59,7 +60,7 @@ $CXX $BASE -O3 src/converter.cc -o "$ROOT/converter" || FAIL=1
 
 # micro-benchmarks
 $CC -O2 -g -o "$BIN/microbench" pe/bench/microbench.c || FAIL=1
-if [ "$OS" = Linux ] && [ -f /usr/include/papi.h ]; then
+if [ "${HAVE_PAPI:-0}" = 1 ]; then
   $CC -O2 -g -DUSE_PAPI -o "$BIN/microbench_papi" pe/bench/microbench.c -lpapi || FAIL=1
 fi
 
